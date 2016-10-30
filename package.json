@@ -8,12 +8,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "ssh://git@openlab.ncl.ac.uk:17150/GW/CryptoCam.git"
+    "url": "https://openlab.ncl.ac.uk/gitlab/GW/CryptoCam.git"
   },
   "author": "Gerard Wilkinson",
   "license": "UNLICENCED",
   "dependencies": {
     "bleno": "^0.4.1",
+    "file-encryptor": "^0.1.1",
     "raspicam": "^0.2.13"
   }
 }
