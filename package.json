@@ -1,0 +1,19 @@
+{
+  "name": "CryptoCam",
+  "version": "1.0.0",
+  "description": "Privacy conscious video camera.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "ssh://git@openlab.ncl.ac.uk:17150/GW/CryptoCam.git"
+  },
+  "author": "Gerard Wilkinson",
+  "license": "UNLICENCED",
+  "dependencies": {
+    "bleno": "^0.4.1",
+    "raspicam": "^0.2.13"
+  }
+}
