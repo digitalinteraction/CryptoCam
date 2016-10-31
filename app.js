@@ -7,7 +7,7 @@ var fs = require('fs');
 
 var config = {
 	recordingDir: "recordings",
-	videoLength: 30
+	videoLength: 5
 };
 
 var currentKey;
@@ -27,7 +27,7 @@ function generateKey(callback) {
 
 function encryptRecording(key, video, callback) {
 	var options = { algorithm: 'aes256' };
-	encryptor.encryptFile('video', path.join(__dirname, config.recordingDir, path.basename(video)), key, options, callback);
+	encryptor.encryptFile(video, path.join(__dirname, config.recordingDir, path.basename(video)), key, options, callback);
 }
 
 function deleteRecording(lastOutput) {
@@ -39,13 +39,16 @@ function newCamera(outputFile) {
 	var camera = new raspicam({
 		mode: "video",
 		output: outputFile,
-		timeout: 0
+		timeout: 0, //config.videoLength * 1000,
+		nopreview: true
 	});
 	
 	return camera;
 }
 
 function newRecording() {
+	console.log("New recording...");
+
 	currentOutputFile = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-') + '.mp4');
 	currentCamera = newCamera(currentOutputFile);
 	
@@ -70,14 +73,23 @@ bleno.on('stateChange', function(state) {
 	newRecording();
 
 	setInterval(function() {
-		currentCamera.stop();
-	
-		var lastKey = currentKey;
-		var lastOutput = currentOutputFile;
-	
-		newRecording();
 		
-		encryptRecording(lastKey, lastOutput);
-		deleteRecording(lastOutput);
+		console.log('Stopping video...');
+		currentCamera.stop();
+
+		setTimeout(function() {
+			console.log("Video 'read'...");
+			var lastKey = currentKey;
+			var lastOutput = currentOutputFile; 
+	
+			newRecording();
+
+			console.log("Encrypting previous recording...");		
+			encryptRecording(lastKey, lastOutput, function() {
+				console.log("Removing previous recording...");
+				deleteRecording(lastOutput);
+			});
+		}, 100);	
 	}, config.videoLength * 1000);
 });
+
