@@ -87,7 +87,7 @@ bleno.on('stateChange', function(state) {
 			console.log("Encrypting previous recording...");		
 			encryptRecording(lastKey, lastOutput, function() {
 				console.log("Removing previous recording...");
-//				deleteRecording(lastOutput);
+				deleteRecording(lastOutput);
 			});
 		}, 100);	
 	}, config.videoLength * 1000);
