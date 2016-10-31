@@ -15,13 +15,13 @@ var currentCamera;
 var currentOutputFile;
 
 function advertiseKey(key) {
-	var advertisementData = new Buffer(key);
+	var advertisementData = key; // new Buffer(key);
 	bleno.startAdvertisingWithEIRData(advertisementData);
 }
 
 function generateKey(callback) {
 	crypto.randomBytes(31, function(err, buffer) {
-		callback(buffer.toString('hex'));
+		callback(buffer);
 	});
 }
 
@@ -49,7 +49,7 @@ function newCamera(outputFile) {
 function newRecording() {
 	console.log("New recording...");
 
-	currentOutputFile = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-') + '.mp4');
+	currentOutputFile = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-') + '.h264');
 	currentCamera = newCamera(currentOutputFile);
 	
 	generateKey(function (key) {
@@ -58,7 +58,7 @@ function newRecording() {
 		currentCamera.start();
 		console.log('Started recording: ' + currentOutputFile);
 		advertiseKey(currentKey);
-		console.log('Using key: ' + currentKey);	
+		console.log('Using key: ' + currentKey.toString('hex'));	
 	});
 }
 
@@ -87,7 +87,7 @@ bleno.on('stateChange', function(state) {
 			console.log("Encrypting previous recording...");		
 			encryptRecording(lastKey, lastOutput, function() {
 				console.log("Removing previous recording...");
-				deleteRecording(lastOutput);
+//				deleteRecording(lastOutput);
 			});
 		}, 100);	
 	}, config.videoLength * 1000);
