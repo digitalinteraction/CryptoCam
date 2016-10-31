@@ -7,7 +7,7 @@ var fs = require('fs');
 
 var config = {
 	recordingDir: "recordings",
-	videoLength: 5
+	videoLength: 30
 };
 
 var currentKey;
