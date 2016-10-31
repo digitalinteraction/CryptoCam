@@ -5,69 +5,79 @@ var encryptor = require('file-encryptor');
 var path = require('path');
 var fs = require('fs');
 
-var Config = {
+var config = {
 	recordingDir: "recordings",
 	videoLength: 30
 };
+
+var currentKey;
+var currentCamera;
+var currentOutputFile;
 
 function advertiseKey(key) {
 	var advertisementData = new Buffer(key);
 	bleno.startAdvertisingWithEIRData(advertisementData);
 }
 
-function generateKey() {
-	return function(callback) {
-		crypto.randomBytes(31, callback);
-	};
+function generateKey(callback) {
+	crypto.randomBytes(31, function(err, buffer) {
+		callback(buffer.toString('hex'));
+	});
 }
 
-function encryptRecording(key, video) {
+function encryptRecording(key, video, callback) {
 	var options = { algorithm: 'aes256' };
-	return function(callback) {
-		encryptor.encryptFile('video', path.join(__dirname, path.basename(video)), key, options, callback);
-	};
+	encryptor.encryptFile('video', path.join(__dirname, config.recordingDir, path.basename(video)), key, options, callback);
 }
 
 function deleteRecording(lastOutput) {
 	fs.unlinkSync(lastOutput);
 }
 
-function newRecording(outputFile) {
+function newCamera(outputFile) {
+	console.log(outputFile);
 	var camera = new raspicam({
 		mode: "video",
-		ouput: outputFile,
+		output: outputFile,
 		timeout: 0
 	});
 	
 	return camera;
 }
 
+function newRecording() {
+	currentOutputFile = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-') + '.mp4');
+	currentCamera = newCamera(currentOutputFile);
+	
+	generateKey(function (key) {
+		currentKey = key;
+		
+		currentCamera.start();
+		console.log('Started recording: ' + currentOutputFile);
+		advertiseKey(currentKey);
+		console.log('Using key: ' + currentKey);	
+	});
+}
+
 console.log('Starting CryptoCam...');
 
-var outputFile = path.join(__dirname, new Date().toISOString() + '.mp4');
-var camera = newRecording(outputFile);
-var key = await generateKey();
+console.log('Starting Bluetooth...');
 
-camera.start();
-console.log('Started recording: ' + outputFile);
-advertiseKey(key);
-console.log('Using key: ' + key);
+bleno.on('stateChange', function(state) {
+	console.log('STATE: ' + state);
+	if (state != 'poweredOn') { return; }
 
-setInterval(function() {
-	camera.stop();
+	newRecording();
+
+	setInterval(function() {
+		currentCamera.stop();
 	
-	var lastKey = key;
-	var lastOutput = outputFile;
+		var lastKey = currentKey;
+		var lastOutput = currentOutputFile;
 	
-	outputFile = path.join(__dirname, new Date().toISOString() + '.mp4');
-	camera = newRecording(outputFile);
-	key = await generateKey();
-	
-	camera.start();
-	console.log('Started recording: ' + outputFile);
-	advertiseKey(key);
-	console.log('Using key: ' + key);
-	
-	await encryptRecording(lastKey, lastOutput);
-	deleteRecording(lastOutput);
-}, Config.videoLength * 1000);
+		newRecording();
+		
+		encryptRecording(lastKey, lastOutput);
+		deleteRecording(lastOutput);
+	}, config.videoLength * 1000);
+});
