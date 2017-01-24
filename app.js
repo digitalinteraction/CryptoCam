@@ -4,23 +4,27 @@ var Crypto = require("crypto");
 var Encryptor = require("file-encryptor");
 var Led = require("sense-hat-led");
 var Path = require("path");
-var FS = require("fs");
-var AWS = require("aws-sdk");
+var Fs = require("fs");
+var Url = require("url");
+var Uuid = require("uuid/v1");
+var Aws = require("aws-sdk");
 
 var PrimaryService = Bleno.PrimaryService;
 var Characteristic = Bleno.Characteristic;
 
+Led.setRotation(270);
+
 var Config = {
 	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam",
 	recordingDir: "recordings",
-	videoLength: 10,
-	proxUuid: "crypto92-cam1-0000-0000-000000000000",
+	videoLength: 30,
+	proxUuid: "cc92cc92-ca19-0000-0000-000000000000",
 	major: 0,
 	minor: 0,
 	measuredPower: -59,
 	deviceName: "CryptoCam",
-	serviceUuid: "crypto92-cam1-0000-0000-000000000001",
-	keyCharacUuid: "crypto92-cam1-0000-0000-000000000002"
+	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001",
+	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002"
 };
 
 var U = [0,255,0];
@@ -52,8 +56,10 @@ O, O, D, D, D, O, O, O
 var currentKey;
 var currentCamera;
 var currentOutputFile;
+var currentUrl;
 
 var activeClients = 0;
+var characCallbacks = [];
 
 var primaryService;
 var keyCharacteristic;
@@ -68,22 +74,27 @@ function startAdvertising(serviceName, serviceUuids) {
 	Bleno.startAdvertising(serviceName, serviceUuids, (error) => {
 		console.log(error);
 	});
-
 }
 
 function setupAws(profile) {
-	var credentials = new AWS.SharedIniFileCredentials({ profile: profile });
-	AWS.config.credentials = credentials;
+	var credentials = new Aws.SharedIniFileCredentials({ profile: profile });
+	Aws.config.credentials = credentials;
 }
 
 function setupWorkspace() {
-	if (!FS.existsSync(Config.recordingDir)) {
-		FS.mkdirSync(Config.recordingDir);
+	if (!Fs.existsSync(Config.recordingDir)) {
+		Fs.mkdirSync(Config.recordingDir);
 	}
 }
 
 function updateKeyCharac(json) {
-	keyCharacteristic.value = new Buffer(json);
+	var data = Buffer.from(json, "utf8");
+	console.log("Updated Key Characteristic: " + json);
+	keyCharacteristic.value = data;
+
+	characCallbacks.forEach(function(callback) {
+		callback(data);
+	});
 }
 
 function generateKey(callback) {
@@ -92,18 +103,18 @@ function generateKey(callback) {
 	});
 }
 
-function encryptRecording(key, video, callback) {
+function encryptRecording(key, video, output, callback) {
 	var options = { algorithm: "aes256" };
-	debugger;
-	Encryptor.encryptFile(video, Path.join(__dirname, Config.recordingDir, Path.basename(video)), key, options, callback);
+	Encryptor.encryptFile(video, output, key, options, callback);
 }
 
-function deleteRecording(lastOutput) {
-	FS.unlinkSync(lastOutput);
+function deleteFile(file) {
+	Fs.unlinkSync(file);
 }
 
-function uploadFileAndDelete(file, callback) {
-	
+function uploadFile(file, url, callback) {
+	// TODO: Actually upload to that URL...
+	callback();
 }
 
 function newCamera(outputFile) {
@@ -126,12 +137,13 @@ function newRecording() {
 	
 	generateKey(function (key) {
 		currentKey = key;
+		currentUrl = Url.resolve(Config.baseUrl, Uuid());
 		
 		currentCamera.start();
 		console.log("Started recording: " + currentOutputFile);
 		updateKeyCharac(JSON.stringify({
 			key: currentKey,
-			url: Config.baseUrl
+			url: currentUrl
 		}));
 		console.log("Using key: " + currentKey.toString("hex"));	
 	});
@@ -139,6 +151,7 @@ function newRecording() {
 
 function subscribed(maxValueSize, updateValueCallback) {
 	activeClients++;
+	characCallbacks.push(updateValueCallback);
 	Led.setPixels(ledUp);
 }
 
@@ -168,6 +181,8 @@ primaryService = new PrimaryService({
 	characteristics: [keyCharacteristic]
 });
 
+Bleno.setServices([primaryService]);
+
 Bleno.on("stateChange", function(state) {
 	console.log("STATE: " + state);
 	if (state != "poweredOn") { return; }
@@ -184,15 +199,21 @@ Bleno.on("stateChange", function(state) {
 		setTimeout(function() {
 			console.log("Video 'read'...");
 			var lastKey = currentKey;
-			var lastOutput = currentOutputFile; 
+			var lastOutput = currentOutputFile;
+			var lastUrl = currentUrl;
 	
 			newRecording();
 			counter(--Config.videoLength);
 
-			console.log("Encrypting previous recording...");		
-			encryptRecording(lastKey, lastOutput, function() {
-				console.log("Removing previous recording...");
-				deleteRecording(lastOutput);
+			console.log("Encrypting previous recording...");
+			var encryptedPath = Path.join(__dirname, Config.recordingDir, Path.basename(lastOutput));	
+			encryptRecording(lastKey, lastOutput, encryptedPath, function() {
+				console.log("Uploading previous recording...");
+				deleteFile(lastOutput);
+				uploadFile(encryptedPath, lastUrl, function() {
+					deleteFile(encryptedPath);
+					console.log("Uploaded and Removed...");
+				});
 			});
 		}, 100);
 	}, Config.videoLength * 1000);
