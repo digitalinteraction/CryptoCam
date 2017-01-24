@@ -189,6 +189,18 @@ Bleno.on("stateChange", function(state) {
 	
 	startAdvertising(Config.deviceName, [keyCharacteristic.uuid]);
 	startBeacon(Config.proxUuid, Config.major, Config.minor, Config.measuredPower);	
+
+	// Countdown
+	countdown(Config.videoLength - 1);
+
+	function countdown(count) {
+		if (count > 0) {
+			setTimeout(function() {
+				Led.showMessage(count.toString(), 0.1, [0,0,255]);
+				countdown(--count);
+			}, 1000);
+		}
+	}
 	
 	newRecording();
 
@@ -201,9 +213,9 @@ Bleno.on("stateChange", function(state) {
 			var lastKey = currentKey;
 			var lastOutput = currentOutputFile;
 			var lastUrl = currentUrl;
-	
+			
+			countdown(Config.videoLength - 1);
 			newRecording();
-			counter(--Config.videoLength);
 
 			console.log("Encrypting previous recording...");
 			var encryptedPath = Path.join(__dirname, Config.recordingDir, Path.basename(lastOutput));	
@@ -217,17 +229,5 @@ Bleno.on("stateChange", function(state) {
 			});
 		}, 100);
 	}, Config.videoLength * 1000);
-	
-	// Countdown
-	counter(--Config.videoLength);
-
-	function counter(count) {
-		if (count > 0) {
-			setTimeout(function() {
-				Led.showMessage(count.toString(), 0.1, [0,0,255]);
-				counter(--count);
-			}, 1000);
-		}
-	}
 });
 
