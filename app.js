@@ -15,7 +15,9 @@ var Characteristic = Bleno.Characteristic;
 Led.setRotation(270);
 
 var Config = {
-	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam",
+	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/",
+	awsProfile: "CryptoCam",
+	encryption: "aes256",
 	recordingDir: "recordings",
 	videoLength: 30,
 	proxUuid: "cc92cc92-ca19-0000-0000-000000000000",
@@ -24,11 +26,14 @@ var Config = {
 	measuredPower: -59,
 	deviceName: "CryptoCam",
 	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001",
-	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002"
+	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002",
+	connectionTimeout: 5,
+	readTimeout: 5
 };
 
 var U = [0,255,0];
 var D = [255,0,0];
+var Y = [255,255,0];
 var O = [0,0,0];
 
 var ledUp = [
@@ -53,13 +58,27 @@ O, D, D, D, D, D, O, O,
 O, O, D, D, D, O, O, O
 ];
 
+var ledKey = [
+O, O, O, O, O, O, O, O,
+O, O, O, O, O, O, O, O,
+O, O, O, O, O, Y, Y, O,
+Y, Y, Y, Y, Y, O, O, Y,
+Y, Y, Y, Y, Y, O, O, Y,
+Y, Y, O, O, O, Y, Y, O,
+O, O, O, O, O, O, O, O,
+O, O, O, O, O, O, O, O
+];
+
+var s3;
+
 var currentKey;
 var currentCamera;
 var currentOutputFile;
 var currentUrl;
 
-var activeClients = 0;
-var characCallbacks = [];
+var currentKeyBytes;
+var connectionTimeout = null;
+var readTimeout = null;
 
 var primaryService;
 var keyCharacteristic;
@@ -79,6 +98,10 @@ function startAdvertising(serviceName, serviceUuids) {
 function setupAws(profile) {
 	var credentials = new Aws.SharedIniFileCredentials({ profile: profile });
 	Aws.config.credentials = credentials;
+
+	s3 = new Aws.S3({
+		params: { Bucket: Config.bucketName }
+	});
 }
 
 function setupWorkspace() {
@@ -90,11 +113,7 @@ function setupWorkspace() {
 function updateKeyCharac(json) {
 	var data = Buffer.from(json, "utf8");
 	console.log("Updated Key Characteristic: " + json);
-	keyCharacteristic.value = data;
-
-	characCallbacks.forEach(function(callback) {
-		callback(data);
-	});
+	currentKeyBytes = data;
 }
 
 function generateKey(callback) {
@@ -104,7 +123,7 @@ function generateKey(callback) {
 }
 
 function encryptRecording(key, video, output, callback) {
-	var options = { algorithm: "aes256" };
+	var options = { algorithm: Config.encryption };
 	Encryptor.encryptFile(video, output, key, options, callback);
 }
 
@@ -112,9 +131,17 @@ function deleteFile(file) {
 	Fs.unlinkSync(file);
 }
 
-function uploadFile(file, url, callback) {
-	// TODO: Actually upload to that URL...
-	callback();
+function uploadFile(path, key, callback) {
+	Fs.readFile(path, function (err, data) {
+		if (err) throw err;
+		s3.upload({
+			Key: key,
+			Body: data,
+			ACL: "public-read"
+		}, function (err, data) {
+			callback();
+		});
+	});
 }
 
 function newCamera(outputFile) {
@@ -142,38 +169,42 @@ function newRecording() {
 		currentCamera.start();
 		console.log("Started recording: " + currentOutputFile);
 		updateKeyCharac(JSON.stringify({
-			key: currentKey,
-			url: currentUrl
+			key: currentKey.toString('hex'),
+			encryption: Config.encryption,
+			url: currentUrl,
+			reconnectIn: Config.videoLength * 1000
 		}));
 		console.log("Using key: " + currentKey.toString("hex"));	
 	});
 }
 
-function subscribed(maxValueSize, updateValueCallback) {
-	activeClients++;
-	characCallbacks.push(updateValueCallback);
-	Led.setPixels(ledUp);
-}
-
-function unsubscribed() {
-	activeClients--;
-	Led.setPixels(ledDown);
+function onReadRequest(offset, callback) {
+	console.log("KEY READ!!!");
+	Led.setPixels(ledKey);
+	if (readTimeout === null) {
+		clearTimeout(connectionTimeout);
+		callback(Characteristic.RESULT_SUCCESS, currentKeyBytes);
+		readTimeout = setTimeout(function() {
+			Bleno.disconnect();
+		}, Config.readTimeout * 1000);
+	} else {
+		console.log("KEY ALREADY READ, TIMEING OUT CONNECTION!!!");
+		callback(Characteristic.RESULT_SUCCESS, currentKeyBytes);
+	}
 }
 
 console.log("Starting CryptoCam...");
 
 setupWorkspace();
+setupAws(Config.awsProfile);
 
 console.log("Starting Bluetooth...");
 
 keyCharacteristic = 
 	new Characteristic({
 		uuid: Config.keyCharacUuid,
-		properties: ["read", "indicate"],
-		secure: ["read", "indicate"],
-		value: null,
-		onSubscribe: subscribed,
-		onUnsubscribe: unsubscribed
+		properties: ["read"],
+		onReadRequest: onReadRequest
 	});
 
 primaryService = new PrimaryService({
@@ -182,6 +213,12 @@ primaryService = new PrimaryService({
 });
 
 Bleno.setServices([primaryService]);
+
+Bleno.on("accept", function(clientAddress) {
+	connectionTimeout = setTimeout(function() {
+		Bleno.disconnect();
+	}, Config.connectionTimeout * 1000);
+});
 
 Bleno.on("stateChange", function(state) {
 	console.log("STATE: " + state);
@@ -222,7 +259,7 @@ Bleno.on("stateChange", function(state) {
 			encryptRecording(lastKey, lastOutput, encryptedPath, function() {
 				console.log("Uploading previous recording...");
 				deleteFile(lastOutput);
-				uploadFile(encryptedPath, lastUrl, function() {
+				uploadFile(encryptedPath, Url.parse(lastUrl).pathname.split('/')[2], function() {
 					deleteFile(encryptedPath);
 					console.log("Uploaded and Removed...");
 				});
