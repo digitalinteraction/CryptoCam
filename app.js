@@ -108,6 +108,8 @@ function updateKeyCharac(json) {
 	var data = Buffer.from(json, "utf8");
 	console.log("Updated Key Characteristic: " + json);
 	currentKeyBytes = data;
+	var StringDecoder = require("string_decoder").StringDecoder;
+	var decoder = new StringDecoder("utf8");
 }
 
 function generateKey(callback) {
@@ -165,7 +167,6 @@ function newRecording() {
 		console.log("Started recording: " + currentOutputFile);
 		updateKeyCharac(JSON.stringify({
 			key: currentKey.toString('hex'),
-			encryption: Config.encryption,
 			url: currentUrl,
 			reconnectIn: Config.videoLength * 1000
 		}));
