@@ -20,7 +20,6 @@ var Config = {
 	encryption: "aes256",
 	recordingDir: "recordings",
 	videoLength: 30,
-	proxUuid: "cc92cc92-ca19-0000-0000-000000000000",
 	major: 0,
 	minor: 0,
 	measuredPower: -59,
@@ -76,18 +75,13 @@ var currentCamera;
 var currentOutputFile;
 var currentUrl;
 
+var currentSubjects = 0;
 var currentKeyBytes;
 var connectionTimeout = null;
 var readTimeout = null;
 
 var primaryService;
 var keyCharacteristic;
-
-function startBeacon(proxUuid, major, minor, measuredPower) {
-	Bleno.startAdvertisingIBeacon(proxUuid, major, minor, measuredPower, (error) => {
-		console.log(error);
-	});
-}
 
 function startAdvertising(serviceName, serviceUuids) {
 	Bleno.startAdvertising(serviceName, serviceUuids, (error) => {
@@ -165,6 +159,7 @@ function newRecording() {
 	generateKey(function (key) {
 		currentKey = key;
 		currentUrl = Url.resolve(Config.baseUrl, Uuid());
+		currentSubjects = 0;
 		
 		currentCamera.start();
 		console.log("Started recording: " + currentOutputFile);
@@ -183,6 +178,7 @@ function onReadRequest(offset, callback) {
 	Led.setPixels(ledKey);
 	if (readTimeout === null) {
 		clearTimeout(connectionTimeout);
+		currentSubjects++;
 		callback(Characteristic.RESULT_SUCCESS, currentKeyBytes);
 		readTimeout = setTimeout(function() {
 			Bleno.disconnect();
@@ -225,7 +221,6 @@ Bleno.on("stateChange", function(state) {
 	if (state != "poweredOn") { return; }
 	
 	startAdvertising(Config.deviceName, [keyCharacteristic.uuid]);
-	startBeacon(Config.proxUuid, Config.major, Config.minor, Config.measuredPower);	
 
 	// Countdown
 	countdown(Config.videoLength - 1);
@@ -250,20 +245,26 @@ Bleno.on("stateChange", function(state) {
 			var lastKey = currentKey;
 			var lastOutput = currentOutputFile;
 			var lastUrl = currentUrl;
+			var lastSubjectCount = currentSubjects;
 			
 			countdown(Config.videoLength - 1);
 			newRecording();
-
-			console.log("Encrypting previous recording...");
-			var encryptedPath = Path.join(__dirname, Config.recordingDir, Path.basename(lastOutput));	
-			encryptRecording(lastKey, lastOutput, encryptedPath, function() {
-				console.log("Uploading previous recording...");
-				deleteFile(lastOutput);
-				uploadFile(encryptedPath, Url.parse(lastUrl).pathname.split('/')[2], function() {
-					deleteFile(encryptedPath);
-					console.log("Uploaded and Removed...");
+			
+			if (lastSubjectCount > 0) {
+				console.log("Encrypting previous recording...");
+				var encryptedPath = Path.join(__dirname, Config.recordingDir, Path.basename(lastOutput));	
+				encryptRecording(lastKey, lastOutput, encryptedPath, function() {
+					console.log("Uploading previous recording...");
+					deleteFile(lastOutput);
+					uploadFile(encryptedPath, Url.parse(lastUrl).pathname.split('/')[2], function() {
+						deleteFile(encryptedPath);
+						console.log("Uploaded and Removed...");
+					});
 				});
-			});
+			} else {
+				deleteFile(lastOutput);
+				console.log("Key not read so deleted recording without uploading.");
+			}
 		}, 100);
 	}, Config.videoLength * 1000);
 });
