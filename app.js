@@ -17,6 +17,7 @@ Led.setRotation(270);
 var Config = {
 	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/",
 	awsProfile: "CryptoCam",
+	bucketName: "cryptocam",
 	encryption: "aes256",
 	recordingDir: "recordings",
 	videoLength: 30,
@@ -108,8 +109,6 @@ function updateKeyCharac(json) {
 	var data = Buffer.from(json, "utf8");
 	console.log("Updated Key Characteristic: " + json);
 	currentKeyBytes = data;
-	var StringDecoder = require("string_decoder").StringDecoder;
-	var decoder = new StringDecoder("utf8");
 }
 
 function generateKey(callback) {
@@ -135,7 +134,7 @@ function uploadFile(path, key, callback) {
 			Body: data,
 			ACL: "public-read"
 		}, function (err, data) {
-			callback();
+			callback(err);
 		});
 	});
 }
@@ -257,9 +256,13 @@ Bleno.on("stateChange", function(state) {
 				encryptRecording(lastKey, lastOutput, encryptedPath, function() {
 					console.log("Uploading previous recording...");
 					deleteFile(lastOutput);
-					uploadFile(encryptedPath, Url.parse(lastUrl).pathname.split('/')[2], function() {
+					uploadFile(encryptedPath, Url.parse(lastUrl).pathname.split('/')[2], function(err) {
+						if (err) {
+							console.log("Failed to upload: " + err);	
+						} else {
+							console.log("Uploaded and Removed...");
+						}
 						deleteFile(encryptedPath);
-						console.log("Uploaded and Removed...");
 					});
 				});
 			} else {
