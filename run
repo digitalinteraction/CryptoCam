@@ -1,0 +1,1 @@
+node app 2> /dev/null | grep -v 'raspicam'
