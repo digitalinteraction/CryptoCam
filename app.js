@@ -183,7 +183,7 @@ bleno.on("accept", function(clientAddress) {
 });
 
 bleno.on("stateChange", function(state) {
-	console.log("Bluetooth State: " + state);
+	console.log("Bleno State: " + state);
 	if (state != "poweredOn") { return; }
 	
 	startAdvertising(Config.deviceName, [keyCharacteristic.uuid]);
@@ -234,3 +234,5 @@ bleno.on("stateChange", function(state) {
 		}, 100);
 	}, Config.videoLength * 1000);
 });
+
+console.log("Waiting for Bleno to start...");

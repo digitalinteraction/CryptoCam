@@ -1,1 +1,3 @@
-node app 2> /dev/null | grep -v 'raspicam'
+sleep 5
+hciconfig hci0 up
+node app #2> /dev/null | grep -v 'raspicam'
