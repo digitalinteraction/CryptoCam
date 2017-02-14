@@ -1,0 +1,11 @@
+[Uint]
+Description="CryptoCam: Privacy Concious Open Circuit Television"
+
+[Service]
+WorkingDirectory=/home/pi/CryptoCam
+ExecStart=/bin/bash run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
