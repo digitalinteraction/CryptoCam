@@ -1,8 +1,6 @@
 const raspicam = require("raspicam");
 const bleno = require("bleno");
 const crypto = require("crypto");
-const encryptor = require("file-encryptor");
-const led = require("sense-hat-led");
 const path = require("path");
 const fs = require("fs");
 const url = require("url");
@@ -11,6 +9,7 @@ const aws = require("aws-sdk");
 const glob = require("glob");
 const shredfile = require("shredfile")();
 const exec = require("child_process").exec;
+const os = require("os");
 
 const PrimaryService = bleno.PrimaryService;
 const Characteristic = bleno.Characteristic;
@@ -21,65 +20,28 @@ const Config = {
 	bucketName: "cryptocam",
 	encryption: "aes256",
 	videoLength: 30,
-	deviceName: "CryptoCam",
+	deviceName: os.hostname(),
 	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001",
 	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002",
 	connectionTimeout: 5,
 	readTimeout: 5
 };
 
-const U = [0,255,0];
-const D = [255,0,0];
-const Y = [255,255,0];
-const O = [0,0,0];
+let s3;
 
-const ledUp = [
-O, O, O, U, U, O, O, O,
-O, O, U, U, U, U, O, O,
-O, U, U, U, U, U, U, O,
-U, U, O, U, U, O, U, U,
-U, O, O, U, U, O, O, U,
-O, O, O, U, U, O, O, O,
-O, O, O, U, U, O, O, O,
-O, O, O, U, U, O, O, O
-];
+let currentKey;
+let currentIv;
+let currentCamera;
+let currentOutputFile;
+let currentUrl;
 
-const ledDown = [
-O, O, O, D, D, O, O, O,
-O, O, O, D, D, O, O, O,
-O, O, O, D, D, O, O, O,
-O, O, O, D, D, O, O, D,
-D, O, O, D, D, O, D, D,
-D, D, O, D, D, D, D, O,
-O, D, D, D, D, D, O, O,
-O, O, D, D, D, O, O, O
-];
+let currentSubjects = 0;
+let currentKeyBytes;
+let connectionTimeout = null;
+let readTimeout = null;
 
-const ledKey = [
-O, O, O, O, O, O, O, O,
-O, O, O, O, O, O, O, O,
-O, O, O, O, O, Y, Y, O,
-Y, Y, Y, Y, Y, O, O, Y,
-Y, Y, Y, Y, Y, O, O, Y,
-Y, Y, O, O, O, Y, Y, O,
-O, O, O, O, O, O, O, O,
-O, O, O, O, O, O, O, O
-];
-
-var s3;
-
-var currentKey;
-var currentCamera;
-var currentOutputFile;
-var currentUrl;
-
-var currentSubjects = 0;
-var currentKeyBytes;
-var connectionTimeout = null;
-var readTimeout = null;
-
-var primaryService;
-var keyCharacteristic;
+let primaryService;
+let keyCharacteristic;
 
 function startAdvertising(serviceName, serviceUuids) {
 	bleno.startAdvertising(serviceName, serviceUuids, (error) => {
@@ -99,7 +61,7 @@ function setupAws(profile) {
 }
 
 function setupWorkspace() {
-	var oldRecordings =  glob.sync("*.{h264,mp4}", {});
+	var oldRecordings =  glob.sync("*.{h264,mp4,enc}", {});
 	console.log("Clearing old recordings...");
 	for (i in oldRecordings) {
 		shredfile.shred(oldRecordings[i]);
@@ -113,14 +75,20 @@ function updateKeyCharac(json) {
 }
 
 function generateKey(callback) {
-	crypto.randomBytes(32, function(err, buffer) {
-		callback(buffer);
+	crypto.randomBytes(32, function(err, key) {
+		crypto.randomBytes(16, function(err, iv) {
+			callback(key, iv);
+		});
 	});
 }
 
-function encryptRecording(key, video, output, callback) {
-	var options = { algorithm: Config.encryption };
-	encryptor.encryptFile(video, output, key, options, callback);
+function encryptRecording(key, iv, video, output, callback) {
+	let cipher = crypto.createCipheriv(Config.encryption, key, iv);
+	let i = fs.createReadStream(video);
+	let o = fs.createWriteStream(output);
+	
+	i.pipe(cipher).pipe(o);
+	callback();
 }
 
 function uploadFile(path, key, callback) {
@@ -154,8 +122,9 @@ function newRecording() {
 	currentOutputFile = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-') + ".h264");
 	currentCamera = newCamera(currentOutputFile);
 	
-	generateKey(function (key) {
+	generateKey(function (key, iv) {
 		currentKey = key;
+		currentIv = iv;
 		currentUrl = url.resolve(Config.baseUrl, uuid());
 		currentSubjects = 0;
 		
@@ -163,6 +132,8 @@ function newRecording() {
 		console.log("Started recording: " + currentOutputFile);
 		updateKeyCharac(JSON.stringify({
 			key: currentKey.toString('hex'),
+			iv: currentIv.toString('hex'),
+			encryption: Config.encryption,
 			url: currentUrl,
 			reconnectIn: Config.videoLength * 1000
 		}));
@@ -170,7 +141,6 @@ function newRecording() {
 }
 
 function onReadRequest(offset, callback) {
-	led.setPixels(ledKey);
 	if (readTimeout === null) {
 		console.log("KEY READ!!!");
 		clearTimeout(connectionTimeout);
@@ -188,7 +158,6 @@ console.log("Starting CryptoCam...");
 
 setupWorkspace();
 setupAws(Config.awsProfile);
-led.sync.setRotation(270);
 
 console.log("Starting Bluetooth...");
 
@@ -218,17 +187,6 @@ bleno.on("stateChange", function(state) {
 	if (state != "poweredOn") { return; }
 	
 	startAdvertising(Config.deviceName, [keyCharacteristic.uuid]);
-	countdown(Config.videoLength - 1);
-
-	function countdown(count) {
-		if (count > 0) {
-			setTimeout(function() {
-				led.showMessage(count.toString(), 0.1, [0,0,255]);
-				countdown(--count);
-			}, 1000);
-		}
-	}
-	
 	newRecording();
 
 	setInterval(function() {
@@ -237,23 +195,23 @@ bleno.on("stateChange", function(state) {
 
 		setTimeout(function() {
 			console.log("Processing last recording...");
-			var lastKey = currentKey;
-			var lastOutput = currentOutputFile;
-			var lastUrl = currentUrl;
-			var lastSubjectCount = currentSubjects;
+			let lastKey = currentKey;
+			let lastIv = currentIv;
+			let lastOutput = currentOutputFile;
+			let lastUrl = currentUrl;
+			let lastSubjectCount = currentSubjects;
 			
-			countdown(Config.videoLength - 1);
 			newRecording();
 			
 			if (lastSubjectCount > 0) {
 				console.log("Wrapping previous recording: " + lastOutput);
-				var mp4Path = path.join(__dirname, path.basename(lastOutput, ".h264")) + ".mp4";
+				let mp4Path = path.join(__dirname, path.basename(lastOutput, ".h264")) + ".mp4";
 				exec("MP4Box -fps 30 -add '" + lastOutput + "' '" + mp4Path + "'", function (error, stdout, stderr) {
 					shredfile.shred(lastOutput);
 					if (!error) {
-						var encryptedPath = path.join(__dirname, path.basename(mp4Path, ".mp4") + ".enc");
+						let encryptedPath = path.join(__dirname, path.basename(mp4Path, ".mp4") + ".enc");
 						console.log("Encrypting previous recording: " + mp4Path);
-						encryptRecording(lastKey, mp4Path, encryptedPath, function() {
+						encryptRecording(lastKey, lastIv, mp4Path, encryptedPath, function() {
 							console.log("Uploading previous recording: " + encryptedPath);
 							shredfile.shred(mp4Path);
 							uploadFile(encryptedPath, url.parse(lastUrl).pathname.split('/')[2], function(err) {
