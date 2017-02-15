@@ -46,3 +46,5 @@ jspm_packages
 *.mp4
 *.h264
 *.enc
+*.jpg
+*.thumb
