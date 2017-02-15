@@ -32,7 +32,6 @@ let s3;
 let currentKey;
 let currentIv;
 let currentCamera;
-let currentOutputThumb;
 let currentOutputFile;
 let currentUrl;
 
@@ -105,10 +104,10 @@ function uploadFile(path, key, callback) {
 	});
 }
 
-function newCamera(mode, outputFile) {
-	console.log(`Recording '${mode}' to: ${outputFile}`);
+function newCamera(outputFile) {
+	console.log(`Recording to: ${outputFile}`);
 	var camera = new raspicam({
-		mode: mode,
+		mode: "video",
 		output: outputFile,
 		timeout: 0,
 		nopreview: true
@@ -121,33 +120,25 @@ function newRecording() {
 	console.log("Starting new recording...");
 	
 	let currentOutput = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
-	currentOutputThumb = currentOutput + ".jpg";
-	currentOutputFile = currentOutput + ".h264";
+	currentOutputFile = currentOutput + ".h264";	
+	currentCamera = newCamera(currentOutputFile);
 	
-	let thumbCamera = newCamera("photo", currentOutputThumb);
-	thumbCamera.on("read", (err, filename) => {
-		console.log("Captured Thumbnail!");
-		thumbCamera.stop();
-		currentCamera = newCamera("video", currentOutputFile);
-	
-		generateKey((key, iv) => {
-			currentKey = key;
-			currentIv = iv;
-			currentUrl = url.resolve(Config.baseUrl, uuid());
-			currentSubjects = 0;
-			
-			currentCamera.start();
-			console.log(`Started recording: ${currentOutputFile}`);
-			updateKeyCharac(JSON.stringify({
-				key: currentKey.toString('hex'),
-				iv: currentIv.toString('hex'),
-				encryption: Config.encryption,
-				url: currentUrl,
-				reconnectIn: Config.videoLength * 1000
-			}));
-		});
+	generateKey((key, iv) => {
+		currentKey = key;
+		currentIv = iv;
+		currentUrl = url.resolve(Config.baseUrl, uuid());
+		currentSubjects = 0;
+		
+		currentCamera.start();
+		console.log(`Started recording: ${currentOutputFile}`);
+		updateKeyCharac(JSON.stringify({
+			key: currentKey.toString('hex'),
+			iv: currentIv.toString('hex'),
+			encryption: Config.encryption,
+			url: currentUrl,
+			reconnectIn: Config.videoLength * 1000
+		}));
 	});
-	thumbCamera.start();
 }
 
 function onReadRequest(offset, callback) {
@@ -207,7 +198,6 @@ bleno.on("stateChange", (state) => {
 			console.log("Processing last recording...");
 			let lastKey = currentKey;
 			let lastIv = currentIv;
-			let lastOutputThumb = currentOutputThumb;
 			let lastOutput = currentOutputFile;
 			let lastUrl = currentUrl;
 			let lastSubjectCount = currentSubjects;
@@ -216,14 +206,13 @@ bleno.on("stateChange", (state) => {
 			
 			if (lastSubjectCount > 0) {
 				console.log(`Wrapping previous recording: ${lastOutput}`);
-				let mp4Path = path.join(__dirname, path.basename(lastOutput, ".h264")) + ".mp4";
-				exec("MP4Box -fps 30 -add '" + lastOutput + "' '" + mp4Path + "'", (error, stdout, stderr) => {
-					shredfile.shred(lastOutput);
+				let outputPath = path.join(__dirname, path.basename(lastOutput, ".h264"));
+				let mp4Path = outputPath + ".mp4";
+				exec(`avconv -i '${lastOutput}' -c:v copy -f mp4 '${mp4Path}'`, (error, stdout, stderr) => {
 					if (!error) {
-						let encryptedPath = path.join(__dirname, path.basename(mp4Path, ".mp4"));
 						let uploadKey = url.parse(lastUrl).pathname.split('/')[2];
 						console.log(`Encrypting previous recording: ${mp4Path}`);
-						let encryptedVidPath = encryptedPath + ".enc";
+						let encryptedVidPath = outputPath + ".enc";
 						encryptFile(lastKey, lastIv, mp4Path, encryptedVidPath, () => {
 							console.log(`Uploading previous recording: ${encryptedVidPath}`);
 							shredfile.shred(mp4Path);
@@ -236,26 +225,30 @@ bleno.on("stateChange", (state) => {
 								shredfile.shred(encryptedVidPath);
 							});
 						});
-						console.log(`Encrypting previous thumb: ${lastOutputThumb}`);
-						let encryptedThumbPath = encryptedPath + ".thumb";
-						encryptFile(lastKey, lastIv, lastOutputThumb, encryptedThumbPath, () => {
-							console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
-							shredfile.shred(lastOutputThumb);
-							uploadFile(encryptedThumbPath, uploadKey + ".jpg", (err) => {
-								if (err) {
-									console.err(`Failed to upload: ${err}`);
-								} else {
-									console.log("Uploaded thumb and removed.");
-								}
-								shredfile.shred(encryptedThumbPath);
+						let thumbPath = outputPath + ".jpg";
+						exec(`avconv -ss 00:00:01 -i '${lastOutput}' -vframes 1 -q:v '${thumbPath}'`, (error, stdout, stderror) => {
+							console.log(`Encrypting previous thumb: ${thumbPath}`);
+							shredfile.shred(lastOutput);
+							let encryptedThumbPath = outputPath + ".thumb";
+							encryptFile(lastKey, lastIv, thumbPath, encryptedThumbPath, () => {
+								console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
+								shredfile.shred(thumbPath);
+								uploadFile(encryptedThumbPath, uploadKey + ".jpg", (err) => {
+									if (err) {
+										console.err(`Failed to upload: ${err}`);
+									} else {
+										console.log("Uploaded thumb and removed.");
+									}
+									shredfile.shred(encryptedThumbPath);
+								});
 							});
 						});
 					} else {
-						console.error(`MP4Box failed to wrap recording: ${error}, ${stderr}`);
+						console.error(`Failed to wrap recording: ${error}, ${stderr}`);
+						shredfile.shred(lastOutput);
 					}
 				});
 			} else {
-				shredfile.shred(lastOutputThumb);
 				shredfile.shred(lastOutput);
 				console.log("Key not read so deleted recording without uploading.");
 			}
