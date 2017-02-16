@@ -185,7 +185,7 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 				console.log(`Encrypting previous thumb: ${thumbPath}`);
 				shredfile.shred(outputFile);
 				let encryptedThumbPath = outputPath + ".thumb";
-				encryptFile(key, kv, thumbPath, encryptedThumbPath);
+				encryptFile(key, iv, thumbPath, encryptedThumbPath);
 				console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
 				shredfile.shred(thumbPath);
 				try {
