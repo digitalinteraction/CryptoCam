@@ -1,4 +1,0 @@
-#!/bin/bash
-MP4Box -fps 30 -add $1 _out.mp4
-sudo mplayer -vo sdl _out.mp4
-

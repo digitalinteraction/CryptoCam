@@ -11,47 +11,69 @@ const shredfile = require("shredfile")();
 const exec = require("child_process").exec;
 const os = require("os");
 
+/**
+ * Author: Gerard Wilkinson, Dan Jackson
+ * Description: CryptoCam
+ * */
+
+// Camera Configuration
+const Config = {
+	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/", // Upload location for all data
+	awsProfile: "CryptoCam", // Used to authenticate with AWS
+	bucketName: "cryptocam", // Destination S3 bucket
+	encryption: "aes256", // OpenSSL encryption function
+	videoLength: 30, // Length in seconds of recording cycles
+	deviceName: os.hostname(), // Use device hostname as Bleno device name
+	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001", // Key service UUID
+	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Key characteristc UUID
+	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
+	readTimeout: 5 // Time in seconds before forced disconnect after key read
+};
+
 const PrimaryService = bleno.PrimaryService;
 const Characteristic = bleno.Characteristic;
 
-const Config = {
-	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/",
-	awsProfile: "CryptoCam",
-	bucketName: "cryptocam",
-	encryption: "aes256",
-	videoLength: 30,
-	deviceName: os.hostname(),
-	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001",
-	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002",
-	connectionTimeout: 5,
-	readTimeout: 5
-};
-
+// Static configuration and setup
 let s3;
 
 let currentKey;
 let currentIv;
 let currentCamera;
-let currentOutputThumb;
 let currentOutputFile;
 let currentUrl;
 
+let currentClient;
 let currentSubjects = 0;
 let currentKeyBytes;
 let connectionTimeout = null;
 let readTimeout = null;
 
-let primaryService;
-let keyCharacteristic;
+let keyCharacteristic = new Characteristic({
+	uuid: Config.keyCharacUuid,
+	properties: ["read"],
+	onReadRequest: onReadRequest
+});
 
-function startAdvertising(serviceName, serviceUuids) {
-	bleno.startAdvertising(serviceName, serviceUuids, (error) => {
-		if (error) {
-			console.error(`Bleno Advertisement Error: ${error}`);
-		}
-	});
+let primaryService = new PrimaryService({
+	uuid: Config.serviceUuid,
+	characteristics: [keyCharacteristic]
+});
+
+/**
+ * Clear up from previous sessions.
+ */
+function setupWorkspace() {
+	var oldRecordings =  glob.sync("*.{h264,mp4,jpg,enc,thumb}", {});
+	console.log(`Clearing ${oldRecordings.length} files from old recordings.`);
+	for (i in oldRecordings) {
+		shredfile.shred(oldRecordings[i]);
+	}
 }
 
+/**
+ * Authenticate with AWS and setup S3 bucket connection.
+ * @param profile
+ */
 function setupAws(profile) {
 	var credentials = new aws.SharedIniFileCredentials({ profile: profile });
 	aws.config.credentials = credentials;
@@ -61,54 +83,41 @@ function setupAws(profile) {
 	});
 }
 
-function setupWorkspace() {
-	var oldRecordings =  glob.sync("*.{h264,mp4,jpg,enc,thumb}", {});
-	console.log(`Clearing ${oldRecordings.length} old recordings.`);
-	for (i in oldRecordings) {
-		shredfile.shred(oldRecordings[i]);
-	}
-}
-
-function updateKeyCharac(json) {
-	var data = Buffer.from(json, "utf8");
-	console.log(`Updated Key Characteristic: ${json}`);
-	currentKeyBytes = data;
-}
-
-function generateKey(callback) {
-	crypto.randomBytes(32, (err, key) => {
-		crypto.randomBytes(16, (err, iv) => {
-			callback(key, iv);
+/**
+ * Upload file to AWS.
+ * @param path
+ * @param key
+ */
+function uploadFile(path, key) {
+	return new Promise((resolve, reject) => {
+		fs.readFile(path, (ferr, data) => {
+			if (!ferr) {
+				s3.upload({
+					Key: key,
+					Body: data,
+					ACL: "public-read"
+				}, (uerr, data) => {
+					if (!uerr) {
+						resolve(data);
+					} else {
+						reject(`Unable to upload file: ${uerr}`);
+					}
+				});
+			} else {
+				reject(`Unable to read file (${path}) for upload: ${ferr}`);
+			}
 		});
 	});
 }
 
-function encryptFile(key, iv, video, output, callback) {
-	let cipher = crypto.createCipheriv(Config.encryption, key, iv);
-	let i = fs.createReadStream(video);
-	let o = fs.createWriteStream(output);
-	
-	i.pipe(cipher).pipe(o);
-	callback();
-}
-
-function uploadFile(path, key, callback) {
-	fs.readFile(path, (err, data) => {
-		if (err) throw err;
-		s3.upload({
-			Key: key,
-			Body: data,
-			ACL: "public-read"
-		}, (err, data) => {
-			callback(err);
-		});
-	});
-}
-
-function newCamera(mode, outputFile) {
-	console.log(`Recording '${mode}' to: ${outputFile}`);
+/**
+ * Create new camera to record.
+ * @param outputFile
+ * @returns
+ */
+function newCamera(outputFile) {
 	var camera = new raspicam({
-		mode: mode,
+		mode: "video",
 		output: outputFile,
 		timeout: 0,
 		nopreview: true
@@ -117,150 +126,262 @@ function newCamera(mode, outputFile) {
 	return camera;
 }
 
-function newRecording() {
+/**
+ * Generate new key, paths and start new recording.
+ */
+async function newRecording() {
 	console.log("Starting new recording...");
 	
 	let currentOutput = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
-	currentOutputThumb = currentOutput + ".jpg";
-	currentOutputFile = currentOutput + ".h264";
-	
-	let thumbCamera = newCamera("photo", currentOutputThumb);
-	thumbCamera.on("read", (err, filename) => {
-		console.log("Captured Thumbnail!");
-		thumbCamera.stop();
-		currentCamera = newCamera("video", currentOutputFile);
-	
-		generateKey((key, iv) => {
-			currentKey = key;
-			currentIv = iv;
-			currentUrl = url.resolve(Config.baseUrl, uuid());
-			currentSubjects = 0;
-			
-			currentCamera.start();
-			console.log(`Started recording: ${currentOutputFile}`);
-			updateKeyCharac(JSON.stringify({
-				key: currentKey.toString('hex'),
-				iv: currentIv.toString('hex'),
-				encryption: Config.encryption,
-				url: currentUrl,
-				reconnectIn: Config.videoLength * 1000
-			}));
-		});
-	});
-	thumbCamera.start();
+	currentOutputFile = currentOutput + ".h264";	
+	currentCamera = newCamera(currentOutputFile);
+	currentCamera.start();
+	console.log(`Started recording: ${currentOutputFile}`);
+
+	currentUrl = url.resolve(Config.baseUrl, uuid());
+	currentSubjects = 0;
+
+	let result = await generateKey();
+	currentKey = result.key;
+	currentIv = result.iv;
+	updateKeyCharac(JSON.stringify({
+		key: currentKey.toString('hex'),
+		iv: currentIv.toString('hex'),
+		encryption: Config.encryption,
+		url: currentUrl,
+		reconnectIn: Config.videoLength * 1000
+	}));
 }
 
+/**
+ * Process previous recording. Encrypt, upload, remove.
+ * @param outputFile
+ * @param key
+ * @param iv
+ * @param url
+ */
+async function processRecording(outputFile, key, iv, destinationUrl) {
+	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
+
+	console.log(`Wrapping previous recording: ${outputFile}`);
+
+	try {
+		// Wrap video
+		let mp4Path = outputPath + ".mp4";
+		await wrapRecording(outputFile, mp4Path);
+		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
+
+		// Encrypt video
+		console.log(`Encrypting previous recording: ${mp4Path}`);
+		let encryptedVidPath = outputPath + ".enc";
+		await encryptFile(key, iv, mp4Path, encryptedVidPath);
+
+		// Upload video
+		console.log(`Uploading previous recording: ${encryptedVidPath}`);
+		await uploadFile(encryptedVidPath, uploadKey + ".mp4");
+		console.log("Uploaded video and Removed.");
+			
+		// Grab thumb
+		let thumbPath = outputPath + ".jpg";
+		await grabFrame(mp4Path, thumbPath);
+
+		// Encrypt thumb
+		console.log(`Encrypting previous thumb: ${thumbPath}`);
+		let encryptedThumbPath = outputPath + ".thumb";
+		await encryptFile(key, iv, thumbPath, encryptedThumbPath);
+
+		// Upload thumb
+		console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
+		await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
+		console.log("Uploaded thumb and removed.");
+		console.log("PREVIOUS RECORDING SUCCESSFULLY PROCESSED!!!");
+	} catch (err) {
+		console.error(`Unable to process previous recording: ${err}`);
+	} finally {
+		// Clean up
+		try {
+			shredfile.shred(outputFile);
+			shredfile.shred(mp4Path);
+			shredfile.shred(encryptedVidPath);
+			shredfile.shred(thumbPath);
+			shredfile.shred(encryptedThumbPath);
+		} catch (err) {
+			// Expected, deleted in order of creation.
+		}
+	}
+}
+
+/**
+ * Wraps h264 recording in mp4 using avconv.
+ * @param input
+ * @param output
+ * @returns
+ */
+async function wrapRecording(input, output) {
+	return new Promise((resolve, reject) => {
+		exec(`avconv -i '${input}' -c:v copy -f mp4 '${output}'`, (error, stdout, stderr) => {
+			if (error) {
+				reject(`Failed to wrap recording: ${error}, ${stderr}`);
+			}
+		}).on("exit", () => {
+			resolve();
+		});
+	});
+}
+
+/**
+ * Grabs frame from mp4 using avconv.
+ * @param input
+ * @param output
+ * @returns
+ */
+async function grabFrame(input, output) {
+	return new Promise((resolve, reject) => {
+		exec(`avconv -ss 00:00:00 -i '${input}' -vframes 1 -q:v 2 '${output}'`, (error, stdout, stderr) => {
+			if (error) {
+				reject(`Failed grab frame: ${error}, ${stderr}`);
+			}
+		}).on("exit", () => {
+			resolve();
+		});
+	});
+}
+
+/**
+ * Encrypt file.
+ * @param key
+ * @param iv
+ * @param input
+ * @param output
+ * @returns
+ */
+async function encryptFile(key, iv, input, output) {
+	return new Promise((resolve, reject) => {
+		let cipher = crypto.createCipheriv(Config.encryption, key, iv);
+		let i = fs.createReadStream(input);
+		let o = fs.createWriteStream(output);
+
+		let e = i.pipe(cipher).pipe(o);
+
+		e.on("error", (err) => {
+			reject(`Unable to encrypt file: ${err}`);
+		});
+
+		e.on("finish", () => {
+			resolve();
+		});
+	});
+}
+
+/**
+ * Generate new key and initial vector.
+ * @returns
+ */
+function generateKey() {
+	return new Promise((resolve, reject) => {
+		crypto.randomBytes(32, (kerr, key) => {
+			if (kerr) {
+				reject(`Unable to generate key: ${kerr}`);
+			} else {
+				crypto.randomBytes(16, (iverr, iv) => {
+					if (iverr) {
+						reject(`Unable to generate key: ${iverr}`);
+					} else {
+						resolve({ key: key, iv: iv });
+					}
+				});
+			}
+		});
+	});
+}
+
+/**
+ * Start Bleno advertising services.
+ * @param serviceName
+ * @param serviceUuids
+ */
+function startAdvertisingService(serviceName, serviceUuids) {
+	bleno.startAdvertising(serviceName, serviceUuids, (error) => {
+		if (error) {
+			console.error(`Bleno Advertisement Error: ${error}`);
+		}
+	});
+}
+
+/**
+ * Update key characteristc value.
+ * @param json
+ */
+function updateKeyCharac(json) {
+	var data = Buffer.from(json, "utf8");
+	console.log(`Updated Key Characteristic: ${json}`);
+	currentKeyBytes = data;
+}
+
+/**
+ * Bleno key characteristic read handler.
+ * @param offset
+ * @param callback
+ */
 function onReadRequest(offset, callback) {
 	if (readTimeout === null) {
-		console.log("KEY READ!!!");
+		console.log(`KEY READ: ${currentClient}`);
 		clearTimeout(connectionTimeout);
 		currentSubjects++;
 		readTimeout = setTimeout(() => {
 			bleno.disconnect();
 		}, Config.readTimeout * 1000);
-	} else {
-		console.log("KEY ALREADY READ, TIMEING OUT CONNECTION!!!");
 	}
 	callback(Characteristic.RESULT_SUCCESS, currentKeyBytes.slice(offset));
 }
 
-console.log("Starting CryptoCam...");
+/**
+ * Configures and starts Bleno.
+ */
+function startBleno() {
+	bleno.setServices([primaryService]);
 
-setupWorkspace();
-setupAws(Config.awsProfile);
-
-console.log("Starting Bluetooth...");
-
-keyCharacteristic = 
-	new Characteristic({
-		uuid: Config.keyCharacUuid,
-		properties: ["read"],
-		onReadRequest: onReadRequest
+	bleno.on("accept", (clientAddress) => {
+		currentClient = clientAddress;
+		readTimeout = null;
+		connectionTimeout = setTimeout(() => {
+			bleno.disconnect();
+		}, Config.connectionTimeout * 1000);
 	});
 
-primaryService = new PrimaryService({
-	uuid: Config.serviceUuid,
-	characteristics: [keyCharacteristic]
-});
-
-bleno.setServices([primaryService]);
-
-bleno.on("accept", (clientAddress) => {
-	readTimeout = null;
-	connectionTimeout = setTimeout(() => {
-		bleno.disconnect();
-	}, Config.connectionTimeout * 1000);
-});
-
-bleno.on("stateChange", (state) => {
-	console.log("Bleno State: " + state);
-	if (state != "poweredOn") { return; }
+	bleno.on("stateChange", (state) => {
+		console.log("Bleno State: " + state);
+		if (state != "poweredOn") { return; }
 	
-	startAdvertising(Config.deviceName, [keyCharacteristic.uuid]);
-	newRecording();
+		startAdvertisingService("Key Service", [keyCharacteristic.uuid]);		
+		newRecording();
 
-	setInterval(() => {
-		console.log("Stopping video...");
-		currentCamera.stop();
+		setInterval(() => {
+			console.log("Stopping recording...");
+			currentCamera.stop();
 
-		setTimeout(() => {
-			console.log("Processing last recording...");
-			let lastKey = currentKey;
-			let lastIv = currentIv;
-			let lastOutputThumb = currentOutputThumb;
-			let lastOutput = currentOutputFile;
-			let lastUrl = currentUrl;
-			let lastSubjectCount = currentSubjects;
-			
-			newRecording();
-			
-			if (lastSubjectCount > 0) {
-				console.log(`Wrapping previous recording: ${lastOutput}`);
-				let mp4Path = path.join(__dirname, path.basename(lastOutput, ".h264")) + ".mp4";
-				exec("MP4Box -fps 30 -add '" + lastOutput + "' '" + mp4Path + "'", (error, stdout, stderr) => {
-					shredfile.shred(lastOutput);
-					if (!error) {
-						let encryptedPath = path.join(__dirname, path.basename(mp4Path, ".mp4"));
-						let uploadKey = url.parse(lastUrl).pathname.split('/')[2];
-						console.log(`Encrypting previous recording: ${mp4Path}`);
-						let encryptedVidPath = encryptedPath + ".enc";
-						encryptFile(lastKey, lastIv, mp4Path, encryptedVidPath, () => {
-							console.log(`Uploading previous recording: ${encryptedVidPath}`);
-							shredfile.shred(mp4Path);
-							uploadFile(encryptedVidPath, uploadKey + ".mp4", (err) => {
-								if (err) {
-									console.error(`Failed to upload: ${err}`);	
-								} else {
-									console.log("Uploaded video and Removed.");
-								}
-								shredfile.shred(encryptedVidPath);
-							});
-						});
-						console.log(`Encrypting previous thumb: ${lastOutputThumb}`);
-						let encryptedThumbPath = encryptedPath + ".thumb";
-						encryptFile(lastKey, lastIv, lastOutputThumb, encryptedThumbPath, () => {
-							console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
-							shredfile.shred(lastOutputThumb);
-							uploadFile(encryptedThumbPath, uploadKey + ".jpg", (err) => {
-								if (err) {
-									console.err(`Failed to upload: ${err}`);
-								} else {
-									console.log("Uploaded thumb and removed.");
-								}
-								shredfile.shred(encryptedThumbPath);
-							});
-						});
-					} else {
-						console.error(`MP4Box failed to wrap recording: ${error}, ${stderr}`);
-					}
-				});
-			} else {
-				shredfile.shred(lastOutputThumb);
-				shredfile.shred(lastOutput);
-				console.log("Key not read so deleted recording without uploading.");
-			}
-		}, 100);
-	}, Config.videoLength * 1000);
-});
+			setTimeout(() => {
+				console.log("Processing last recording...");
+				if (currentSubjects > 0) {
+					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
+				} else {
+					shredfile.shred(currentOutputFile);
+					console.log("Key not read so deleted recording without uploading.");
+				}
+				newRecording();
+			}, 100);
+		}, Config.videoLength * 1000);
+	});
+}
 
-console.log("Waiting for Bleno to start...");
+/**
+ * Starts CryptoCam.
+ */
+function startCryptoCam() {
+	setupWorkspace();
+	setupAws(Config.awsProfile);
+	startBleno();
+}
+
+console.log("Starting CryptoCam...");
+startCryptoCam();
