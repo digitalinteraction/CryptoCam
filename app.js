@@ -91,18 +91,21 @@ function setupAws(profile) {
 function uploadFile(path, key) {
 	return new Promise((resolve, reject) => {
 		fs.readFile(path, (ferr, data) => {
-			reject(`Unable to read file for upload: ${ferr}`);
-			s3.upload({
-				Key: key,
-				Body: data,
-				ACL: "public-read"
-			}, (err, data) => {
-				if (uerr) {
-					reject(`Unable to upload file: ${uerr}`);
-				} else {
-					resolve(data);
-				}
-			});
+			if (!ferr) {
+				s3.upload({
+					Key: key,
+					Body: data,
+					ACL: "public-read"
+				}, (err, data) => {
+					if (uerr) {
+						reject(`Unable to upload file: ${uerr}`);
+					} else {
+						resolve(data); 
+					}
+				});
+			} else {
+				reject(`Unable to read file (${path}) for upload: ${ferr}`);
+			}
 		});
 	});
 }
