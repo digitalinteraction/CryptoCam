@@ -10,6 +10,7 @@ const glob = require("glob");
 const shredfile = require("shredfile")();
 const exec = require("child_process").exec;
 const os = require("os");
+const argv = require('minimist')(process.argv.slice(2));
 
 /**
  * Author: Gerard Wilkinson, Dan Jackson
@@ -32,6 +33,8 @@ const Config = {
 
 const PrimaryService = bleno.PrimaryService;
 const Characteristic = bleno.Characteristic;
+
+const DEBUG = argv.debug;
 
 // Static configuration and setup
 let s3;
@@ -314,7 +317,7 @@ function startAdvertisingService(serviceName, serviceUuids) {
  */
 function updateKeyCharac(json) {
 	var data = Buffer.from(json, "utf8");
-	console.log(`Updated Key Characteristic: ${json}`);
+	if (DEBUG) console.log(`Updated Key Characteristic: ${json}`);
 	currentKeyBytes = data;
 }
 
@@ -325,7 +328,7 @@ function updateKeyCharac(json) {
  */
 function onReadRequest(offset, callback) {
 	if (readTimeout === null) {
-		console.log(`KEY READ: ${currentClient}`);
+		if (DEBUG) console.log(`KEY READ: ${currentClient}`);
 		clearTimeout(connectionTimeout);
 		currentSubjects++;
 		readTimeout = setTimeout(() => {
