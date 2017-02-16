@@ -158,52 +158,89 @@ async function newRecording() {
  * @param url
  */
 function processRecording(outputFile, key, iv, destinationUrl) {
-	console.log(`Wrapping previous recording: ${outputFile}`);
 	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
-	let mp4Path = outputPath + ".mp4";
-	exec(`avconv -i '${outputFile}' -c:v copy -f mp4 '${mp4Path}'`, async (verror, vstdout, vstderr) => {
-		shredfile.shred(outputFile);
-		if (!verror) {
-			let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
-			// Process video
-			console.log(`Encrypting previous recording: ${mp4Path}`);
-			let encryptedVidPath = outputPath + ".enc";
-			await encryptFile(key, iv, mp4Path, encryptedVidPath);
-			console.log(`Uploading previous recording: ${encryptedVidPath}`);
-			shredfile.shred(mp4Path);
-			try {
-				await uploadFile(encryptedVidPath, uploadKey + ".mp4");
-				console.log("Uploaded video and Removed.");
-			} catch (err) {
-				console.error(`Failed to upload video: ${err}`);
-			}
-			shredfile.shred(encryptedVidPath);
+	console.log(`Wrapping previous recording: ${outputFile}`);
+
+	try {
+		// Wrap video
+		let mp4Path = outputPath + ".mp4";
+		await wrapRecording(outputFile, mp4Path);
+		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
+
+		// Encrypt video
+		console.log(`Encrypting previous recording: ${mp4Path}`);
+		let encryptedVidPath = outputPath + ".enc";
+		await encryptFile(key, iv, mp4Path, encryptedVidPath);
+
+		// Upload video
+		console.log(`Uploading previous recording: ${encryptedVidPath}`);
+		await uploadFile(encryptedVidPath, uploadKey + ".mp4");
+		console.log("Uploaded video and Removed.");
 			
-			// Process thumb
-			let thumbPath = outputPath + ".jpg";
-			exec(`avconv -ss 00:00:00 -i '${mp4Path}' -vframes 1 -q:v 2 '${thumbPath}'`, async (terror, tstdout, tstderr) => {
-				if (!terror) {
-					console.log(`Encrypting previous thumb: ${thumbPath}`);
-					let encryptedThumbPath = outputPath + ".thumb";
-					await encryptFile(key, iv, thumbPath, encryptedThumbPath);
-					shredfile.shred(thumbPath);
+		// Grab thumb
+		let thumbPath = outputPath + ".jpg";
+		await grabFrame(mp4Path, thumbPath);
 
-					console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
-					try {
-						await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
-						console.log("Uploaded thumb and removed.");
-					} catch (err) {
-						console.err(`Failed to upload thumb: ${err}`);
-					}
-					shredfile.shred(encryptedThumbPath);
-				} else {
-					console.error(`Failed to wrap recording: ${terror}, ${tstderr}`);
-				}
-			});
-		} else {
-			console.error(`Failed to wrap recording: ${verror}, ${vstderr}`);
+		// Encrypt thumb
+		console.log(`Encrypting previous thumb: ${thumbPath}`);
+		let encryptedThumbPath = outputPath + ".thumb";
+		await encryptFile(key, iv, thumbPath, encryptedThumbPath);
+
+		// Upload thumb
+		console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
+		await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
+		console.log("Uploaded thumb and removed.");
+		console.log("PREVIOUS RECORDING SUCCESSFULLY PROCESSED!!!");
+	} catch (err) {
+		console.error(`Unable to process previous recording: ${err}`);
+	} finally {
+		// Clean up
+		try {
+			shredfile.shred(outputFile);
+			shredfile.shred(mp4Path);
+			shredfile.shred(encryptedVidPath);
+			shredfile.shred(thumbPath);
+			shredfile.shred(encryptedThumbPath);
+		} catch (err) {
+			// Expected, deleted in order of creation.
 		}
+	}
+}
+
+/**
+ * Wraps h264 recording in mp4 using avconv.
+ * @param input
+ * @param output
+ * @returns
+ */
+async function wrapRecording(input, output) {
+	return new Promise((resolve, reject) => {
+		exec(`avconv -i '${input}' -c:v copy -f mp4 '${output}'`, (error, stdout, stderr) => {
+			if (error) {
+				reject(`Failed to wrap recording: ${error}, ${stderr}`);
+			}
+		}).on("exit", () => {
+			resolve();
+		});
+	});
+}
+
+/**
+ * Grabs frame from mp4 using avconv.
+ * @param input
+ * @param output
+ * @returns
+ */
+async function grabFrame(input, output) {
+	return new Promise((resolve, reject) => {
+		exec(`avconv -ss 00:00:00 -i '${input}' -vframes 1 -q:v 2 '${output}'`, (error, stdout, stderr) => {
+			if (error) {
+				reject(`Failed grab frame: ${error}, ${stderr}`);
+			}
+		}).on("exit", () => {
+			resolve();
+		});
 	});
 }
 
