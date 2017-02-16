@@ -139,9 +139,11 @@ async function newRecording() {
 	currentSubjects = 0;
 
 	let result = await generateKey();
+	currentKey = result.key;
+	currentIv = result.iv;
 	updateKeyCharac(JSON.stringify({
-		key: result.key.toString('hex'),
-		iv: result.iv.toString('hex'),
+		key: currentKey.toString('hex'),
+		iv: currentIv.toString('hex'),
 		encryption: Config.encryption,
 		url: currentUrl,
 		reconnectIn: Config.videoLength * 1000
