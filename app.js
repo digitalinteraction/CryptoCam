@@ -157,7 +157,7 @@ async function newRecording() {
  * @param iv
  * @param url
  */
-function processRecording(outputFile, key, iv, destinationUrl) {
+async function processRecording(outputFile, key, iv, destinationUrl) {
 	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
 
 	console.log(`Wrapping previous recording: ${outputFile}`);
