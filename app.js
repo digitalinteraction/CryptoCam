@@ -159,7 +159,7 @@ function processRecording(outputFile, key, iv, url) {
 	console.log(`Wrapping previous recording: ${outputFile}`);
 	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
 	let mp4Path = outputPath + ".mp4";
-	exec(`avconv -i '${lastOutput}' -c:v copy -f mp4 '${mp4Path}'`, async (error, stdout, stderr) => {
+	exec(`avconv -i '${outputFile}' -c:v copy -f mp4 '${mp4Path}'`, async (error, stdout, stderr) => {
 		if (!error) {
 			let uploadKey = url.parse(lastUrl).pathname.split('/')[2];
 
@@ -179,7 +179,7 @@ function processRecording(outputFile, key, iv, url) {
 			
 			// Process thumb
 			let thumbPath = outputPath + ".jpg";
-			exec(`avconv -ss 00:00:01 -i '${lastOutput}' -vframes 1 -q:v '${thumbPath}'`, async (error, stdout, stderror) => {
+			exec(`avconv -ss 00:00:01 -i '${outputFile}' -vframes 1 -q:v '${thumbPath}'`, async (error, stdout, stderror) => {
 				console.log(`Encrypting previous thumb: ${thumbPath}`);
 				shredfile.shred(outputFile);
 				let encryptedThumbPath = outputPath + ".thumb";
