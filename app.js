@@ -162,6 +162,7 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
 	let mp4Path = outputPath + ".mp4";
 	exec(`avconv -i '${outputFile}' -c:v copy -f mp4 '${mp4Path}'`, async (verror, vstdout, vstderr) => {
+		shredfile.shred(outputFile);
 		if (!verror) {
 			let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
@@ -181,8 +182,7 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 			
 			// Process thumb
 			let thumbPath = outputPath + ".jpg";
-			exec(`avconv -ss 00:00:00 -i '${outputFile}' -vframes 1 -q:v 2 '${thumbPath}'`, async (terror, tstdout, tstderr) => {
-				shredfile.shred(outputFile);
+			exec(`avconv -ss 00:00:00 -i '${mp4Path}' -vframes 1 -q:v 2 '${thumbPath}'`, async (terror, tstdout, tstderr) => {
 				if (!terror) {
 					console.log(`Encrypting previous thumb: ${thumbPath}`);
 					let encryptedThumbPath = outputPath + ".thumb";
@@ -203,7 +203,6 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 			});
 		} else {
 			console.error(`Failed to wrap recording: ${verror}, ${vstderr}`);
-			shredfile.shred(outputFile);
 		}
 	});
 }
