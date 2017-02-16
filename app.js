@@ -300,7 +300,10 @@ function startBleno() {
 		newRecording();
 
 		setInterval(() => {
-			currentCamera.on("read", (err, filename) => {
+			console.log("Stopping recording...");
+			currentCamera.stop();
+
+			setTimeout(() => {
 				console.log("Processing last recording...");
 				if (currentSubjects > 0) {
 					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
@@ -309,16 +312,13 @@ function startBleno() {
 					console.log("Key not read so deleted recording without uploading.");
 				}
 				newRecording();
-			});
-			
-			console.log("Stopping recording...");
-			currentCamera.stop();
+			}, 100);
 		}, Config.videoLength * 1000);
 	});
 }
 
 /**
- * Starts CryptoCam
+ * Starts CryptoCam.
  */
 function startCryptoCam() {
 	setupWorkspace();
