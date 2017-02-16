@@ -161,8 +161,8 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 	console.log(`Wrapping previous recording: ${outputFile}`);
 	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
 	let mp4Path = outputPath + ".mp4";
-	exec(`avconv -i '${outputFile}' -c:v copy -f mp4 '${mp4Path}'`, async (error, stdout, stderr) => {
-		if (!error) {
+	exec(`avconv -i '${outputFile}' -c:v copy -f mp4 '${mp4Path}'`, async (verror, vstdout, vstderr) => {
+		if (!verror) {
 			let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
 			// Process video
@@ -181,23 +181,28 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 			
 			// Process thumb
 			let thumbPath = outputPath + ".jpg";
-			exec(`avconv -ss 00:00:01 -i '${outputFile}' -vframes 1 -q:v '${thumbPath}'`, async (error, stdout, stderror) => {
-				console.log(`Encrypting previous thumb: ${thumbPath}`);
+			exec(`avconv -ss 00:00:01 -i '${outputFile}' -vframes 1 -q:v '${thumbPath}'`, async (terror, tstdout, tstderror) => {
 				shredfile.shred(outputFile);
-				let encryptedThumbPath = outputPath + ".thumb";
-				await encryptFile(key, iv, thumbPath, encryptedThumbPath);
-				console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
-				shredfile.shred(thumbPath);
-				try {
-					await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
-					console.log("Uploaded thumb and removed.");
-				} catch (err) {
-					console.err(`Failed to upload thumb: ${err}`);
+				if (!terror) {
+					console.log(`Encrypting previous thumb: ${thumbPath}`);
+					let encryptedThumbPath = outputPath + ".thumb";
+					await encryptFile(key, iv, thumbPath, encryptedThumbPath);
+					shredfile.shred(thumbPath);
+
+					console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
+					try {
+						await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
+						console.log("Uploaded thumb and removed.");
+					} catch (err) {
+						console.err(`Failed to upload thumb: ${err}`);
+					}
+					shredfile.shred(encryptedThumbPath);
+				} else {
+					console.error(`Failed to wrap recording: ${terror}, ${tstderr}`);
 				}
-				shredfile.shred(encryptedThumbPath);
 			});
 		} else {
-			console.error(`Failed to wrap recording: ${error}, ${stderr}`);
+			console.error(`Failed to wrap recording: ${verror}, ${vstderr}`);
 			shredfile.shred(outputFile);
 		}
 	});
