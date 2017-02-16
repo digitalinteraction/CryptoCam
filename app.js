@@ -96,11 +96,11 @@ function uploadFile(path, key) {
 					Key: key,
 					Body: data,
 					ACL: "public-read"
-				}, (err, data) => {
-					if (uerr) {
-						reject(`Unable to upload file: ${uerr}`);
+				}, (uerr, data) => {
+					if (!uerr) {
+						resolve(data);
 					} else {
-						resolve(data); 
+						reject(`Unable to upload file: ${uerr}`);
 					}
 				});
 			} else {
