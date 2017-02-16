@@ -161,12 +161,12 @@ function processRecording(outputFile, key, iv, url) {
 	let mp4Path = outputPath + ".mp4";
 	exec(`avconv -i '${outputFile}' -c:v copy -f mp4 '${mp4Path}'`, async (error, stdout, stderr) => {
 		if (!error) {
-			let uploadKey = url.parse(lastUrl).pathname.split('/')[2];
+			let uploadKey = url.parse(url).pathname.split('/')[2];
 
 			// Process video
 			console.log(`Encrypting previous recording: ${mp4Path}`);
 			let encryptedVidPath = outputPath + ".enc";
-			encryptFile(lastKey, lastIv, mp4Path, encryptedVidPath);
+			encryptFile(key, iv, mp4Path, encryptedVidPath);
 			console.log(`Uploading previous recording: ${encryptedVidPath}`);
 			shredfile.shred(mp4Path);
 			try {
