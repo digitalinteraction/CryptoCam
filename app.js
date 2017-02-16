@@ -181,7 +181,7 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 			
 			// Process thumb
 			let thumbPath = outputPath + ".jpg";
-			exec(`avconv -ss 00:00:01 -i '${outputFile}' -vframes 1 -q:v '${thumbPath}'`, async (terror, tstdout, tstderror) => {
+			exec(`avconv -ss 00:00:01 -i '${outputFile}' -vframes 1 -q:v '${thumbPath}'`, async (terror, tstdout, tstderr) => {
 				shredfile.shred(outputFile);
 				if (!terror) {
 					console.log(`Encrypting previous thumb: ${thumbPath}`);
