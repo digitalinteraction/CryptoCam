@@ -90,15 +90,15 @@ function setupAws(profile) {
  */
 function uploadFile(path, key) {
 	return new Promise((resolve, reject) => {
-		fs.readFile(path, (err, data) => {
-			reject(err);
+		fs.readFile(path, (ferr, data) => {
+			reject(`Unable to read file for upload: ${ferr}`);
 			s3.upload({
 				Key: key,
 				Body: data,
 				ACL: "public-read"
 			}, (err, data) => {
-				if (err) {
-					reject(err);
+				if (uerr) {
+					reject(`Unable to upload file: ${uerr}`);
 				} else {
 					resolve(data);
 				}
@@ -259,6 +259,11 @@ async function encryptFile(key, iv, input, output) {
 		let o = fs.createWriteStream(output);
 
 		let e = i.pipe(cipher).pipe(o);
+
+		e.on("error", (err) => {
+			reject(`Unable to encrypt file: ${err}`);
+		});
+
 		e.on("finish", () => {
 			resolve();
 		});
@@ -273,11 +278,11 @@ function generateKey() {
 	return new Promise((resolve, reject) => {
 		crypto.randomBytes(32, (kerr, key) => {
 			if (kerr) {
-				reject(kerr);
+				reject(`Unable to generate key: ${kerr}`);
 			} else {
 				crypto.randomBytes(16, (iverr, iv) => {
 					if (iverr) {
-						reject(iverr);
+						reject(`Unable to generate key: ${iverr}`);
 					} else {
 						resolve({ key: key, iv: iv });
 					}
