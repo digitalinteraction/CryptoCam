@@ -356,7 +356,7 @@ function startBleno() {
 		console.log("Bleno State: " + state);
 		if (state != "poweredOn") { return; }
 	
-		startAdvertisingService("Key Service", [keyCharacteristic.uuid]);		
+		startAdvertisingService(Config.deviceName, [keyCharacteristic.uuid]);		
 		newRecording();
 
 		setInterval(() => {
