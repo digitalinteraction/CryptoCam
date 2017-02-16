@@ -168,7 +168,7 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 			// Process video
 			console.log(`Encrypting previous recording: ${mp4Path}`);
 			let encryptedVidPath = outputPath + ".enc";
-			encryptFile(key, iv, mp4Path, encryptedVidPath);
+			await encryptFile(key, iv, mp4Path, encryptedVidPath);
 			console.log(`Uploading previous recording: ${encryptedVidPath}`);
 			shredfile.shred(mp4Path);
 			try {
@@ -185,7 +185,7 @@ function processRecording(outputFile, key, iv, destinationUrl) {
 				console.log(`Encrypting previous thumb: ${thumbPath}`);
 				shredfile.shred(outputFile);
 				let encryptedThumbPath = outputPath + ".thumb";
-				encryptFile(key, iv, thumbPath, encryptedThumbPath);
+				await encryptFile(key, iv, thumbPath, encryptedThumbPath);
 				console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
 				shredfile.shred(thumbPath);
 				try {
@@ -209,13 +209,19 @@ function processRecording(outputFile, key, iv, destinationUrl) {
  * @param iv
  * @param input
  * @param output
+ * @returns
  */
-function encryptFile(key, iv, input, output) {
-	let cipher = crypto.createCipheriv(Config.encryption, key, iv);
-	let i = fs.createReadStream(input);
-	let o = fs.createWriteStream(output);
-	
-	i.pipe(cipher).pipe(o);
+async function encryptFile(key, iv, input, output) {
+	return new Promise((resolve, reject) => {
+		let cipher = crypto.createCipheriv(Config.encryption, key, iv);
+		let i = fs.createReadStream(input);
+		let o = fs.createWriteStream(output);
+
+		let e = i.pipe(cipher).pipe(o);
+		e.on("finish", () => {
+			resolve();
+		});
+	});
 }
 
 /**
