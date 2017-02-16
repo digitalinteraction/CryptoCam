@@ -113,7 +113,6 @@ function uploadFile(path, key) {
  * @returns
  */
 function newCamera(outputFile) {
-	console.log(`Recording to: ${outputFile}`);
 	var camera = new raspicam({
 		mode: "video",
 		output: outputFile,
@@ -157,8 +156,8 @@ async function newRecording() {
  * @param url
  */
 function processRecording(outputFile, key, iv, url) {
-	console.log(`Wrapping previous recording: ${lastOutput}`);
-	let outputPath = path.join(__dirname, path.basename(lastOutput, ".h264"));
+	console.log(`Wrapping previous recording: ${outputFile}`);
+	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
 	let mp4Path = outputPath + ".mp4";
 	exec(`avconv -i '${lastOutput}' -c:v copy -f mp4 '${mp4Path}'`, async (error, stdout, stderr) => {
 		if (!error) {
@@ -182,7 +181,7 @@ function processRecording(outputFile, key, iv, url) {
 			let thumbPath = outputPath + ".jpg";
 			exec(`avconv -ss 00:00:01 -i '${lastOutput}' -vframes 1 -q:v '${thumbPath}'`, async (error, stdout, stderror) => {
 				console.log(`Encrypting previous thumb: ${thumbPath}`);
-				shredfile.shred(lastOutput);
+				shredfile.shred(outputFile);
 				let encryptedThumbPath = outputPath + ".thumb";
 				encryptFile(lastKey, lastIv, thumbPath, encryptedThumbPath);
 				console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
@@ -197,7 +196,7 @@ function processRecording(outputFile, key, iv, url) {
 			});
 		} else {
 			console.error(`Failed to wrap recording: ${error}, ${stderr}`);
-			shredfile.shred(lastOutput);
+			shredfile.shred(outputFile);
 		}
 	});
 }
@@ -297,23 +296,23 @@ function startBleno() {
 		console.log("Bleno State: " + state);
 		if (state != "poweredOn") { return; }
 	
-		startAdvertisingService("Key Service", [keyCharacteristic.uuid]);
+		startAdvertisingService("Key Service", [keyCharacteristic.uuid]);		
 		newRecording();
 
 		setInterval(() => {
-			console.log("Stopping video...");
-			currentCamera.stop();
-
-			setTimeout(() => {
+			currentCamera.on("read", (err, filename) => {
 				console.log("Processing last recording...");
 				if (currentSubjects > 0) {
 					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
 				} else {
-					shredfile.shred(lastOutput);
+					shredfile.shred(currentOutputFile);
 					console.log("Key not read so deleted recording without uploading.");
 				}
 				newRecording();
-			}, 100);
+			});
+			
+			console.log("Stopping recording...");
+			currentCamera.stop();
 		}, Config.videoLength * 1000);
 	});
 }
