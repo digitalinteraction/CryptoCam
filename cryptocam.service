@@ -2,7 +2,7 @@
 Description="CryptoCam: Privacy Concious Open Circuit Television"
 
 [Service]
-User=root
+User=pi
 WorkingDirectory=/home/pi/CryptoCam
 ExecStart=/bin/bash run
 Restart=always
