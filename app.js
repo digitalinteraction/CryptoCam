@@ -174,40 +174,26 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		await wrapRecording(outputFile, mp4Path);
 		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
-		// Encrypt video
-		console.log(`Encrypting previous recording: ${mp4Path}`);
-		let encryptedVidPath = outputPath + ".enc";
-		await encryptFile(key, iv, mp4Path, encryptedVidPath);
-
-		// Upload video
-		console.log(`Uploading previous recording: ${encryptedVidPath}`);
-		await uploadFile(encryptedVidPath, uploadKey + ".mp4");
-		console.log("Uploaded video and Removed.");
-			
 		// Grab thumb
 		let thumbPath = outputPath + ".jpg";
 		await grabFrame(mp4Path, thumbPath);
 
-		// Encrypt thumb
-		console.log(`Encrypting previous thumb: ${thumbPath}`);
+		// Encrypt video and thumb
+		console.log(`Encrypting previous recording: ${mp4Path}`);
+		let encryptedVidPath = outputPath + ".enc";
 		let encryptedThumbPath = outputPath + ".thumb";
-		await encryptFile(key, iv, thumbPath, encryptedThumbPath);
+		await Promise.all(encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath));
 
-		// Upload thumb
-		console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
-		await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
-		console.log("Uploaded thumb and removed.");
+		// Upload video
+		console.log(`Uploading previous recording: ${encryptedVidPath}`);
+		await Promise.all(uploadFile(encryptedVidPath, uploadKey + ".mp4"), uploadFile(encryptedThumbPath, uploadKey + ".jpg"));
 		console.log("PREVIOUS RECORDING SUCCESSFULLY PROCESSED!!!");
 	} catch (err) {
 		console.error(`Unable to process previous recording: ${err}`);
 	} finally {
 		// Clean up
 		try {
-			shredfile.shred(outputFile);
-			shredfile.shred(mp4Path);
-			shredfile.shred(encryptedVidPath);
-			shredfile.shred(thumbPath);
-			shredfile.shred(encryptedThumbPath);
+			await Promise.all(removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath));
 		} catch (err) {
 			// Expected, deleted in order of creation.
 		}
@@ -272,6 +258,23 @@ async function encryptFile(key, iv, input, output) {
 
 		e.on("finish", () => {
 			resolve();
+		});
+	});
+}
+
+/**
+ * Securely remove file.
+ * @param path
+ * @returns
+ */
+async function removeFile(path) {
+	return new Promise((resolve, reject) => {
+		shredfile.shred(path, (err, file) => {
+			if (err) {
+				reject(`Secure remove failed: ${err}.`);
+			} else {
+				resolve();
+			}
 		});
 	});
 }
