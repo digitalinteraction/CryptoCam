@@ -189,6 +189,7 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		await Promise.all(uploadFile(encryptedVidPath, uploadKey + ".mp4"), uploadFile(encryptedThumbPath, uploadKey + ".jpg"));
 		console.log("PREVIOUS RECORDING SUCCESSFULLY PROCESSED!!!");
 	} catch (err) {
+		console.log(err);
 		console.error(`Unable to process previous recording: ${err}`);
 	} finally {
 		// Clean up
