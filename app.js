@@ -104,10 +104,12 @@ function uploadFile(path, key) {
 						resolve(data);
 					} else {
 						reject(`Unable to upload file: ${uerr}`);
+						if (DEBUG) console.error(uerr);
 					}
 				});
 			} else {
 				reject(`Unable to read file (${path}) for upload: ${ferr}`);
+				if (DEBUG) console.error(ferr);
 			}
 		});
 	});
@@ -182,19 +184,19 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		console.log(`Encrypting previous recording: ${mp4Path}`);
 		let encryptedVidPath = outputPath + ".enc";
 		let encryptedThumbPath = outputPath + ".thumb";
-		await Promise.all(encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath));
+		await Promise.all([encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath)]);
 
 		// Upload video
 		console.log(`Uploading previous recording: ${encryptedVidPath}`);
-		await Promise.all(uploadFile(encryptedVidPath, uploadKey + ".mp4"), uploadFile(encryptedThumbPath, uploadKey + ".jpg"));
+		await Promise.all([uploadFile(encryptedVidPath, uploadKey + ".mp4"), uploadFile(encryptedThumbPath, uploadKey + ".jpg")]);
 		console.log("PREVIOUS RECORDING SUCCESSFULLY PROCESSED!!!");
 	} catch (err) {
-		console.log(err);
 		console.error(`Unable to process previous recording: ${err}`);
+		if (DEBUG) console.error(err);
 	} finally {
 		// Clean up
 		try {
-			await Promise.all(removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath));
+			await Promise.all([removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath)]);
 		} catch (err) {
 			// Expected, deleted in order of creation.
 		}
@@ -212,6 +214,7 @@ async function wrapRecording(input, output) {
 		exec(`avconv -i '${input}' -c:v copy -f mp4 '${output}'`, (error, stdout, stderr) => {
 			if (error) {
 				reject(`Failed to wrap recording: ${error}, ${stderr}`);
+				if (DEBUG) console.error(error);
 			}
 		}).on("exit", () => {
 			resolve();
@@ -230,6 +233,7 @@ async function grabFrame(input, output) {
 		exec(`avconv -ss 00:00:00 -i '${input}' -vframes 1 -q:v 2 '${output}'`, (error, stdout, stderr) => {
 			if (error) {
 				reject(`Failed grab frame: ${error}, ${stderr}`);
+				if (DEBUG) console.error(error);
 			}
 		}).on("exit", () => {
 			resolve();
@@ -255,6 +259,7 @@ async function encryptFile(key, iv, input, output) {
 
 		e.on("error", (err) => {
 			reject(`Unable to encrypt file: ${err}`);
+			if (DEBUG) console.error(err);
 		});
 
 		e.on("finish", () => {
@@ -273,6 +278,7 @@ async function removeFile(path) {
 		shredfile.shred(path, (err, file) => {
 			if (err) {
 				reject(`Secure remove failed: ${err}.`);
+				if (DEBUG) console.error(err);
 			} else {
 				resolve();
 			}
@@ -289,10 +295,12 @@ function generateKey() {
 		crypto.randomBytes(32, (kerr, key) => {
 			if (kerr) {
 				reject(`Unable to generate key: ${kerr}`);
+				if (DEBUG) console.error(kerr);
 			} else {
 				crypto.randomBytes(16, (iverr, iv) => {
 					if (iverr) {
 						reject(`Unable to generate key: ${iverr}`);
+						if (DEBUG) console.error(iverr);
 					} else {
 						resolve({ key: key, iv: iv });
 					}
@@ -311,6 +319,7 @@ function startAdvertisingService(serviceName, serviceUuids) {
 	bleno.startAdvertising(serviceName, serviceUuids, (error) => {
 		if (error) {
 			console.error(`Bleno Advertisement Error: ${error}`);
+			if (DEBUG) console.error(error);
 		}
 	});
 }
