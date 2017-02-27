@@ -69,7 +69,7 @@ function setupWorkspace() {
 	var oldRecordings =  glob.sync("*.{h264,mp4,jpg,enc,thumb}", {});
 	console.log(`Clearing ${oldRecordings.length} files from old recordings.`);
 	for (i in oldRecordings) {
-		shredfile.shred(oldRecordings[i]);
+		removeFile(oldRecordings[i]);
 	}
 }
 
@@ -104,10 +104,12 @@ function uploadFile(path, key) {
 						resolve(data);
 					} else {
 						reject(`Unable to upload file: ${uerr}`);
+						if (DEBUG) console.error(uerr);
 					}
 				});
 			} else {
 				reject(`Unable to read file (${path}) for upload: ${ferr}`);
+				if (DEBUG) console.error(ferr);
 			}
 		});
 	});
@@ -174,40 +176,27 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		await wrapRecording(outputFile, mp4Path);
 		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
-		// Encrypt video
-		console.log(`Encrypting previous recording: ${mp4Path}`);
-		let encryptedVidPath = outputPath + ".enc";
-		await encryptFile(key, iv, mp4Path, encryptedVidPath);
-
-		// Upload video
-		console.log(`Uploading previous recording: ${encryptedVidPath}`);
-		await uploadFile(encryptedVidPath, uploadKey + ".mp4");
-		console.log("Uploaded video and Removed.");
-			
 		// Grab thumb
 		let thumbPath = outputPath + ".jpg";
 		await grabFrame(mp4Path, thumbPath);
 
-		// Encrypt thumb
-		console.log(`Encrypting previous thumb: ${thumbPath}`);
+		// Encrypt video and thumb
+		console.log(`Encrypting previous recording: ${mp4Path}`);
+		let encryptedVidPath = outputPath + ".enc";
 		let encryptedThumbPath = outputPath + ".thumb";
-		await encryptFile(key, iv, thumbPath, encryptedThumbPath);
+		await Promise.all([encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath)]);
 
-		// Upload thumb
-		console.log(`Uploading previous thumbnail: ${encryptedThumbPath}`);
-		await uploadFile(encryptedThumbPath, uploadKey + ".jpg");
-		console.log("Uploaded thumb and removed.");
+		// Upload video
+		console.log(`Uploading previous recording: ${encryptedVidPath}`);
+		await Promise.all([uploadFile(encryptedVidPath, uploadKey + ".mp4"), uploadFile(encryptedThumbPath, uploadKey + ".jpg")]);
 		console.log("PREVIOUS RECORDING SUCCESSFULLY PROCESSED!!!");
 	} catch (err) {
 		console.error(`Unable to process previous recording: ${err}`);
+		if (DEBUG) console.error(err);
 	} finally {
 		// Clean up
 		try {
-			shredfile.shred(outputFile);
-			shredfile.shred(mp4Path);
-			shredfile.shred(encryptedVidPath);
-			shredfile.shred(thumbPath);
-			shredfile.shred(encryptedThumbPath);
+			await Promise.all([removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath)]);
 		} catch (err) {
 			// Expected, deleted in order of creation.
 		}
@@ -225,6 +214,7 @@ async function wrapRecording(input, output) {
 		exec(`avconv -i '${input}' -c:v copy -f mp4 '${output}'`, (error, stdout, stderr) => {
 			if (error) {
 				reject(`Failed to wrap recording: ${error}, ${stderr}`);
+				if (DEBUG) console.error(error);
 			}
 		}).on("exit", () => {
 			resolve();
@@ -243,6 +233,7 @@ async function grabFrame(input, output) {
 		exec(`avconv -ss 00:00:00 -i '${input}' -vframes 1 -q:v 2 '${output}'`, (error, stdout, stderr) => {
 			if (error) {
 				reject(`Failed grab frame: ${error}, ${stderr}`);
+				if (DEBUG) console.error(error);
 			}
 		}).on("exit", () => {
 			resolve();
@@ -268,10 +259,29 @@ async function encryptFile(key, iv, input, output) {
 
 		e.on("error", (err) => {
 			reject(`Unable to encrypt file: ${err}`);
+			if (DEBUG) console.error(err);
 		});
 
 		e.on("finish", () => {
 			resolve();
+		});
+	});
+}
+
+/**
+ * Securely remove file.
+ * @param path
+ * @returns
+ */
+async function removeFile(path) {
+	return new Promise((resolve, reject) => {
+		shredfile.shred(path, (err, file) => {
+			if (err) {
+				reject(`Secure remove failed: ${err}.`);
+				if (DEBUG) console.error(err);
+			} else {
+				resolve();
+			}
 		});
 	});
 }
@@ -285,10 +295,12 @@ function generateKey() {
 		crypto.randomBytes(32, (kerr, key) => {
 			if (kerr) {
 				reject(`Unable to generate key: ${kerr}`);
+				if (DEBUG) console.error(kerr);
 			} else {
 				crypto.randomBytes(16, (iverr, iv) => {
 					if (iverr) {
 						reject(`Unable to generate key: ${iverr}`);
+						if (DEBUG) console.error(iverr);
 					} else {
 						resolve({ key: key, iv: iv });
 					}
@@ -307,6 +319,7 @@ function startAdvertisingService(serviceName, serviceUuids) {
 	bleno.startAdvertising(serviceName, serviceUuids, (error) => {
 		if (error) {
 			console.error(`Bleno Advertisement Error: ${error}`);
+			if (DEBUG) console.error(error);
 		}
 	});
 }
@@ -368,7 +381,7 @@ function startBleno() {
 				if (currentSubjects > 0) {
 					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
 				} else {
-					shredfile.shred(currentOutputFile);
+					removeFile(currentOutputFile);
 					console.log("Key not read so deleted recording without uploading.");
 				}
 				newRecording();
