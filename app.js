@@ -69,7 +69,7 @@ function setupWorkspace() {
 	var oldRecordings =  glob.sync("*.{h264,mp4,jpg,enc,thumb}", {});
 	console.log(`Clearing ${oldRecordings.length} files from old recordings.`);
 	for (i in oldRecordings) {
-		shredfile.shred(oldRecordings[i]);
+		removeFile(oldRecordings[i]);
 	}
 }
 
@@ -371,7 +371,7 @@ function startBleno() {
 				if (currentSubjects > 0) {
 					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
 				} else {
-					shredfile.shred(currentOutputFile);
+					removeFile(currentOutputFile);
 					console.log("Key not read so deleted recording without uploading.");
 				}
 				newRecording();
