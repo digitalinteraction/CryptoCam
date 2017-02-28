@@ -5,8 +5,7 @@ Description="CryptoCam: Privacy Concious Open Circuit Television"
 User=pi
 WorkingDirectory=/home/pi/CryptoCam
 ExecStart=/bin/bash run
-Restart=always
-RestartSec=10
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
