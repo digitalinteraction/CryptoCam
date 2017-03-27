@@ -1,7 +1,7 @@
 # Confidential!! -- Do not share!
 ## CryptoCam: Camera
 
-### System requirements
+### Requirements
 
 1. Node 7.x <
 2. `libavconv`
