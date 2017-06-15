@@ -7,7 +7,6 @@ const url = require("url");
 const uuid = require("uuid/v1");
 const aws = require("aws-sdk");
 const glob = require("glob");
-const shredfile = require("shredfile")();
 const ramdisk = require("node-ramdisk");
 const exec = require("child_process").exec;
 const os = require("os");
@@ -288,9 +287,9 @@ async function encryptFile(key, iv, input, output) {
  */
 async function removeFile(path) {
 	return new Promise((resolve, reject) => {
-		shredfile.shred(path, (err, file) => {
+		fs.unlink(path, (err) => {
 			if (err) {
-				reject(`Secure remove failed: ${err}.`);
+				reject(`Failed to remove file ${path}: ${err}.`);
 				if (DEBUG) console.error(err);
 			} else {
 				resolve();
