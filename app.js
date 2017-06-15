@@ -74,7 +74,7 @@ function setupWorkspace() {
 	return new Promise((resolve, reject) => {
 		disk = ramdisk(Config.ramdiskName);
 
-		Console.log(`Creating new RAM disk ${Config.ramdiskSize}MB.`);
+		console.log(`Creating new RAM disk ${Config.ramdiskSize}MB.`);
 		disk.create(Config.ramdiskSize, (err, mount) => {
 			if (err) {
 				reject(`Unable to create RAM disk: ${err}`);
