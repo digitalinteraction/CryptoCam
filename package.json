@@ -13,10 +13,11 @@
   "author": "Gerard Wilkinson",
   "license": "UNLICENCED",
   "dependencies": {
-    "aws-sdk": "^2.7.27",
+    "aws-sdk": "^2.70.0",
     "bleno": "^0.4.1",
     "glob": "^7.1.1",
     "minimist": "^1.2.0",
+    "node-ramdisk": "^1.2.2",
     "raspicam": "^0.2.13",
     "shredfile": "^0.2.0",
     "uuid": "^3.0.1"

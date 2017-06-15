@@ -8,6 +8,7 @@ const uuid = require("uuid/v1");
 const aws = require("aws-sdk");
 const glob = require("glob");
 const shredfile = require("shredfile")();
+const ramdisk = require("node-ramdisk");
 const exec = require("child_process").exec;
 const os = require("os");
 const argv = require('minimist')(process.argv.slice(2));
@@ -25,6 +26,8 @@ const Config = {
 	encryption: "aes256", // OpenSSL encryption function
 	videoLength: 30, // Length in seconds of recording cycles
 	deviceName: os.hostname(), // Use device hostname as Bleno device name
+	ramdiskName: "CryptoCam", // RAM disk name
+	ramdiskSize: 200, // RAM disk size in MB
 	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001", // Key service UUID
 	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Key characteristc UUID
 	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
@@ -38,6 +41,8 @@ const DEBUG = argv.debug;
 
 // Static configuration and setup
 let s3;
+let disk;
+let volumePoint;
 
 let currentKey;
 let currentIv;
@@ -65,12 +70,20 @@ let primaryService = new PrimaryService({
 /**
  * Clear up from previous sessions.
  */
-function setupWorkspace() {
-	var oldRecordings =  glob.sync("*.{h264,mp4,jpg,enc,thumb}", {});
-	console.log(`Clearing ${oldRecordings.length} files from old recordings.`);
-	for (i in oldRecordings) {
-		removeFile(oldRecordings[i]);
-	}
+async function setupWorkspace() {
+	return new Promise((resolve, reject) => {
+		disk = ramdisk(Config.ramdiskName);
+
+		Console.log(`Creating new RAM disk ${Config.ramdiskSize}MB.`);
+		disk.create(Config.ramdiskSize, (err, mount) => {
+			if (err) {
+				reject(`Unable to create RAM disk: ${err}`);
+			} else {
+				volumePoint = mount;
+				resolve();
+			}
+		});
+	});
 }
 
 /**
@@ -137,7 +150,7 @@ function newCamera(outputFile) {
 async function newRecording() {
 	console.log("Starting new recording...");
 	
-	let currentOutput = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
+	let currentOutput = path.join(volumePoint, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
 	currentOutputFile = currentOutput + ".h264";	
 	currentCamera = newCamera(currentOutputFile);
 	currentCamera.start();
@@ -166,7 +179,7 @@ async function newRecording() {
  * @param url
  */
 async function processRecording(outputFile, key, iv, destinationUrl) {
-	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
+	let outputPath = path.join(volumePoint, path.basename(outputFile, ".h264"));
 
 	console.log(`Wrapping previous recording: ${outputFile}`);
 
@@ -233,7 +246,7 @@ async function grabFrame(input, output) {
 		exec(`avconv -ss 00:00:00 -i '${input}' -vframes 1 -q:v 2 '${output}'`, (error, stdout, stderr) => {
 			if (error) {
 				reject(`Failed grab frame: ${error}, ${stderr}`);
-				if (DEBUG) console.error(error);
+				if (DEBUG) console.error(error, stderr);
 			}
 		}).on("exit", () => {
 			resolve();
@@ -394,7 +407,17 @@ function startBleno() {
  * Starts CryptoCam.
  */
 function startCryptoCam() {
-	setupWorkspace();
+	process.on('exit', () => {
+		disk.delete(volumePoint, (err) => {
+			if (err) {
+				console.log(`Failed to destroy RAM disk: ${err}`);
+			} else {
+				console.log("RAM disk destroyed.");
+			}
+		});
+	});
+
+	await setupWorkspace();
 	setupAws(Config.awsProfile);
 	startBleno();
 }
