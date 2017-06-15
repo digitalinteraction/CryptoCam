@@ -68,8 +68,9 @@ let primaryService = new PrimaryService({
 
 /**
  * Clear up from previous sessions.
+ * @returns
  */
-async function setupWorkspace() {
+function setupWorkspace() {
 	return new Promise((resolve, reject) => {
 		disk = ramdisk(Config.ramdiskName);
 
@@ -405,7 +406,7 @@ function startBleno() {
 /**
  * Starts CryptoCam.
  */
-function startCryptoCam() {
+async function startCryptoCam() {
 	process.on('exit', () => {
 		disk.delete(volumePoint, (err) => {
 			if (err) {
