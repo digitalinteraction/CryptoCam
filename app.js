@@ -312,7 +312,7 @@ function generateKey() {
 			} else {
 				crypto.randomBytes(16, (iverr, iv) => {
 					if (iverr) {
-						reject(`Unable to generate key: ${iverr}`);
+						reject(`Unable to generate iv: ${iverr}`);
 						if (DEBUG) console.error(iverr);
 					} else {
 						resolve({ key: key, iv: iv });
