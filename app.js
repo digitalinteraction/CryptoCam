@@ -368,6 +368,7 @@ function onReadRequest(offset, callback) {
  * Configures and starts Bleno.
  */
 function startBleno() {
+	console.log("Setting up Bleno...");
 	bleno.setServices([primaryService]);
 
 	bleno.on("accept", (clientAddress) => {
