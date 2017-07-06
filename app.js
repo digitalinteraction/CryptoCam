@@ -18,6 +18,7 @@ const argv = require('minimist')(process.argv.slice(2));
 
 // Camera Configuration
 const Config = {
+	recordings: "/tmp/CryptoCam/",
 	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/", // Upload location for all data
 	awsProfile: "CryptoCam", // Used to authenticate with AWS
 	bucketName: "cryptocam", // Destination S3 bucket
@@ -37,8 +38,6 @@ const DEBUG = argv.debug;
 
 // Static configuration and setup
 let s3;
-let disk;
-let volumePoint;
 
 let currentKey;
 let currentIv;
@@ -127,7 +126,7 @@ function newCamera(outputFile) {
 async function newRecording() {
 	console.log("Starting new recording...");
 	
-	let currentOutput = path.join(volumePoint, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
+	let currentOutput = path.join(Config.recordings, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
 	currentOutputFile = currentOutput + ".h264";	
 	currentCamera = newCamera(currentOutputFile);
 	currentCamera.start();
@@ -156,7 +155,7 @@ async function newRecording() {
  * @param url
  */
 async function processRecording(outputFile, key, iv, destinationUrl) {
-	let outputPath = path.join(volumePoint, path.basename(outputFile, ".h264"));
+	let outputPath = path.join(Config.recordings, path.basename(outputFile, ".h264"));
 
 	console.log(`Wrapping previous recording: ${outputFile}`);
 
