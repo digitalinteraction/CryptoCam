@@ -17,7 +17,6 @@
     "bleno": "^0.4.2",
     "glob": "^7.1.2",
     "minimist": "^1.2.0",
-    "node-ramdisk": "^1.2.2",
     "raspicam": "^0.2.13",
     "shredfile": "^0.2.0",
     "uuid": "^3.1.0"

@@ -7,7 +7,6 @@ const url = require("url");
 const uuid = require("uuid/v1");
 const aws = require("aws-sdk");
 const glob = require("glob");
-const ramdisk = require("node-ramdisk");
 const exec = require("child_process").exec;
 const os = require("os");
 const argv = require('minimist')(process.argv.slice(2));
@@ -25,8 +24,6 @@ const Config = {
 	encryption: "aes256", // OpenSSL encryption function
 	videoLength: 30, // Length in seconds of recording cycles
 	deviceName: os.hostname(), // Use device hostname as Bleno device name
-	ramdiskName: "CryptoCam", // RAM disk name
-	ramdiskSize: 200, // RAM disk size in MB
 	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001", // Key service UUID
 	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Key characteristc UUID
 	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
@@ -65,26 +62,6 @@ let primaryService = new PrimaryService({
 	uuid: Config.serviceUuid,
 	characteristics: [keyCharacteristic]
 });
-
-/**
- * Clear up from previous sessions.
- * @returns
- */
-function setupWorkspace() {
-	return new Promise((resolve, reject) => {
-		disk = ramdisk(Config.ramdiskName);
-
-		console.log(`Creating new RAM disk ${Config.ramdiskSize}MB.`);
-		disk.create(Config.ramdiskSize, (err, mount) => {
-			if (err) {
-				reject(`Unable to create RAM disk: ${err}`);
-			} else {
-				volumePoint = mount;
-				resolve();
-			}
-		});
-	});
-}
 
 /**
  * Authenticate with AWS and setup S3 bucket connection.
@@ -408,9 +385,8 @@ function startBleno() {
  * Starts CryptoCam.
  */
 async function startCryptoCam() {
-	startBleno();
-	await setupWorkspace();
 	setupAws(Config.awsProfile);
+	startBleno();
 }
 
 console.log("Starting CryptoCam...");
