@@ -408,19 +408,9 @@ function startBleno() {
  * Starts CryptoCam.
  */
 async function startCryptoCam() {
-	process.on('exit', () => {
-		disk.delete(volumePoint, (err) => {
-			if (err) {
-				console.log(`Failed to destroy RAM disk: ${err}`);
-			} else {
-				console.log("RAM disk destroyed.");
-			}
-		});
-	});
-
+	startBleno();
 	await setupWorkspace();
 	setupAws(Config.awsProfile);
-	startBleno();
 }
 
 console.log("Starting CryptoCam...");
