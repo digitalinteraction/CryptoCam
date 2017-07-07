@@ -188,7 +188,7 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 			await Promise.all([removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath)]);
 		} catch (err) {
 			// Expected, deleted in order of creation.
-			consone.error(`Unable to clean up: ${err}`);
+			console.error(`Unable to clean up: ${err}`);
 		}
 	}
 }
