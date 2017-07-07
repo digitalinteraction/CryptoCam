@@ -184,6 +184,7 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		console.error(`Unable to process previous recording: ${err}`);
 		if (DEBUG) console.error(err);
 	} finally {
+		console.log("Clearing last recording...");
 		// Clean up
 		try {
 			await Promise.all([removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath)]);
