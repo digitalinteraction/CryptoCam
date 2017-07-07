@@ -7,7 +7,6 @@ const url = require("url");
 const uuid = require("uuid/v1");
 const aws = require("aws-sdk");
 const glob = require("glob");
-const shredfile = require("shredfile")();
 const exec = require("child_process").exec;
 const os = require("os");
 const argv = require('minimist')(process.argv.slice(2));
@@ -19,6 +18,7 @@ const argv = require('minimist')(process.argv.slice(2));
 
 // Camera Configuration
 const Config = {
+	recordings: "/tmp/CryptoCam/",
 	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/", // Upload location for all data
 	awsProfile: "CryptoCam", // Used to authenticate with AWS
 	bucketName: "cryptocam", // Destination S3 bucket
@@ -61,17 +61,6 @@ let primaryService = new PrimaryService({
 	uuid: Config.serviceUuid,
 	characteristics: [keyCharacteristic]
 });
-
-/**
- * Clear up from previous sessions.
- */
-function setupWorkspace() {
-	var oldRecordings =  glob.sync("*.{h264,mp4,jpg,enc,thumb}", {});
-	console.log(`Clearing ${oldRecordings.length} files from old recordings.`);
-	for (i in oldRecordings) {
-		removeFile(oldRecordings[i]);
-	}
-}
 
 /**
  * Authenticate with AWS and setup S3 bucket connection.
@@ -137,7 +126,7 @@ function newCamera(outputFile) {
 async function newRecording() {
 	console.log("Starting new recording...");
 	
-	let currentOutput = path.join(__dirname, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
+	let currentOutput = path.join(Config.recordings, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
 	currentOutputFile = currentOutput + ".h264";	
 	currentCamera = newCamera(currentOutputFile);
 	currentCamera.start();
@@ -166,24 +155,25 @@ async function newRecording() {
  * @param url
  */
 async function processRecording(outputFile, key, iv, destinationUrl) {
-	let outputPath = path.join(__dirname, path.basename(outputFile, ".h264"));
+	let outputPath = path.join(Config.recordings, path.basename(outputFile, ".h264"));
 
 	console.log(`Wrapping previous recording: ${outputFile}`);
 
+	let mp4Path = outputPath + ".mp4";
+	let thumbPath = outputPath + ".jpg";
+	let encryptedVidPath = outputPath + ".enc";
+	let encryptedThumbPath = outputPath + ".thumb";
+
 	try {
 		// Wrap video
-		let mp4Path = outputPath + ".mp4";
 		await wrapRecording(outputFile, mp4Path);
 		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
 		// Grab thumb
-		let thumbPath = outputPath + ".jpg";
 		await grabFrame(mp4Path, thumbPath);
 
 		// Encrypt video and thumb
 		console.log(`Encrypting previous recording: ${mp4Path}`);
-		let encryptedVidPath = outputPath + ".enc";
-		let encryptedThumbPath = outputPath + ".thumb";
 		await Promise.all([encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath)]);
 
 		// Upload video
@@ -194,11 +184,13 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		console.error(`Unable to process previous recording: ${err}`);
 		if (DEBUG) console.error(err);
 	} finally {
+		console.log("Clearing last recording...");
 		// Clean up
 		try {
 			await Promise.all([removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath)]);
 		} catch (err) {
 			// Expected, deleted in order of creation.
+			console.error(`Unable to clean up: ${err}`);
 		}
 	}
 }
@@ -233,7 +225,7 @@ async function grabFrame(input, output) {
 		exec(`avconv -ss 00:00:00 -i '${input}' -vframes 1 -q:v 2 '${output}'`, (error, stdout, stderr) => {
 			if (error) {
 				reject(`Failed grab frame: ${error}, ${stderr}`);
-				if (DEBUG) console.error(error);
+				if (DEBUG) console.error(error, stderr);
 			}
 		}).on("exit", () => {
 			resolve();
@@ -275,9 +267,9 @@ async function encryptFile(key, iv, input, output) {
  */
 async function removeFile(path) {
 	return new Promise((resolve, reject) => {
-		shredfile.shred(path, (err, file) => {
+		fs.unlink(path, (err) => {
 			if (err) {
-				reject(`Secure remove failed: ${err}.`);
+				reject(`Failed to remove file ${path}: ${err}.`);
 				if (DEBUG) console.error(err);
 			} else {
 				resolve();
@@ -299,7 +291,7 @@ function generateKey() {
 			} else {
 				crypto.randomBytes(16, (iverr, iv) => {
 					if (iverr) {
-						reject(`Unable to generate key: ${iverr}`);
+						reject(`Unable to generate iv: ${iverr}`);
 						if (DEBUG) console.error(iverr);
 					} else {
 						resolve({ key: key, iv: iv });
@@ -355,6 +347,7 @@ function onReadRequest(offset, callback) {
  * Configures and starts Bleno.
  */
 function startBleno() {
+	console.log("Setting up Bleno...");
 	bleno.setServices([primaryService]);
 
 	bleno.on("accept", (clientAddress) => {
@@ -393,8 +386,7 @@ function startBleno() {
 /**
  * Starts CryptoCam.
  */
-function startCryptoCam() {
-	setupWorkspace();
+async function startCryptoCam() {
 	setupAws(Config.awsProfile);
 	startBleno();
 }

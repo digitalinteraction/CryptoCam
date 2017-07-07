@@ -43,6 +43,8 @@ jspm_packages
 # Output of 'npm pack'
 *.tgz
 
+package-lock.json
+
 *.mp4
 *.h264
 *.enc
