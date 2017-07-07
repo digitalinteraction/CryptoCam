@@ -159,20 +159,21 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 
 	console.log(`Wrapping previous recording: ${outputFile}`);
 
+	let mp4Path = outputPath + ".mp4";
+	let thumbPath = outputPath + ".jpg";
+	let encryptedVidPath = outputPath + ".enc";
+	let encryptedThumbPath = outputPath + ".thumb";
+
 	try {
 		// Wrap video
-		let mp4Path = outputPath + ".mp4";
 		await wrapRecording(outputFile, mp4Path);
 		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
 
 		// Grab thumb
-		let thumbPath = outputPath + ".jpg";
 		await grabFrame(mp4Path, thumbPath);
 
 		// Encrypt video and thumb
 		console.log(`Encrypting previous recording: ${mp4Path}`);
-		let encryptedVidPath = outputPath + ".enc";
-		let encryptedThumbPath = outputPath + ".thumb";
 		await Promise.all([encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath)]);
 
 		// Upload video
@@ -183,11 +184,13 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 		console.error(`Unable to process previous recording: ${err}`);
 		if (DEBUG) console.error(err);
 	} finally {
+		console.log("Clearing last recording...");
 		// Clean up
 		try {
 			await Promise.all([removeFile(outputFile), removeFile(mp4Path), removeFile(encryptedVidPath), removeFile(thumbPath), removeFile(encryptedThumbPath)]);
 		} catch (err) {
 			// Expected, deleted in order of creation.
+			console.error(`Unable to clean up: ${err}`);
 		}
 	}
 }
