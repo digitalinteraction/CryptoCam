@@ -3,4 +3,4 @@ hciconfig hci0 up
 mkdir /tmp/CryptoCam > /dev/null
 chmod 777 /tmp/CryptoCam > /dev/null
 mount -t tmpfs -o size=200M tmpfs /tmp/CryptoCam/ > /dev/null
-node app 2> /dev/null | grep -v 'raspicam'
+node app --name=NAME --mode=<auto,delay,manual> --location=<LATLONG,roaming> 2> /dev/null | grep -v 'raspicam'
