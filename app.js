@@ -26,8 +26,8 @@ const Config = {
 	videoLength: 30, // Length in seconds of recording cycles
 	deviceName: os.hostname(), // Use device hostname as Bleno device name
 	friendlyName: argv.name,
-	mode: argv.mode,
-	location: argv.location,
+	mode: argv.mode, // Cam Mode auto-upload, 
+	location: argv.location, // Cam Latitude/Longitude or Roaming
 	camServiceUuid: "cc92cc92-ca19-0000-0000-000000000000", // Cam service UUID
 	camNameCharacUuid: "cc92cc92-ca19-0000-0000-000000000001", // Cam Name characteristic UUID
 	camModeCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Cam Mode characteristic UUID
