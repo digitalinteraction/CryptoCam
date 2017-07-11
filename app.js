@@ -9,6 +9,7 @@ const aws = require("aws-sdk");
 const glob = require("glob");
 const exec = require("child_process").exec;
 const os = require("os");
+const pjson = require("./package.json");
 const argv = require('minimist')(process.argv.slice(2));
 
 /**
@@ -24,14 +25,16 @@ const Config = {
 	bucketName: "cryptocam", // Destination S3 bucket
 	encryption: "aes256", // OpenSSL encryption function
 	videoLength: 30, // Length in seconds of recording cycles
+	camVersion: pjson.version,
 	deviceName: os.hostname(), // Use device hostname as Bleno device name
-	friendlyName: argv.name,
+	friendlyName: argv.name, // Cam Friendly Name
 	mode: argv.mode, // Cam Mode auto-upload, 
 	location: argv.location, // Cam Latitude/Longitude or Roaming
 	camServiceUuid: "cc92cc92-ca19-0000-0000-000000000000", // Cam service UUID
-	camNameCharacUuid: "cc92cc92-ca19-0000-0000-000000000001", // Cam Name characteristic UUID
-	camModeCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Cam Mode characteristic UUID
-	camLocationCharacUuid: "cc92cc92-ca19-0000-0000-000000000003", // Cam Location characteristic UUID
+	camVersionCharacUuid: "cc92cc92-ca19-0000-0000-000000000001", // Cam Version characteristic UUID
+	camNameCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Cam Name characteristic UUID
+	camModeCharacUuid: "cc92cc92-ca19-0000-0000-000000000003", // Cam Mode characteristic UUID
+	camLocationCharacUuid: "cc92cc92-ca19-0000-0000-000000000004", // Cam Location characteristic UUID
 	keyServiceUuid: "cc92cc92-ca19-0000-0000-000000000010", // Key service UUID
 	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000011", // Key characteristc UUID
 	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
@@ -58,6 +61,12 @@ let currentKeyBytes;
 let connectionTimeout = null;
 let readTimeout = null;
 
+let camVersionCharacteristic = new Characteristic({
+	uuid: Config.camVersionCharacUuid,
+	properties: ["read"],
+	value: Config.version
+});
+
 let camNameCharacteristic = new Characteristic({
 	uuid: Config.camNameCharacUuid,
 	properties: ["read"],
@@ -79,6 +88,7 @@ let camLocationCharacteristic = new Characteristic({
 let camService = new PrimaryService({
 	uuid: Config.camServiceUuid,
 	characteristics: [
+		camVersionCharacteristic,
 		camNameCharacteristic,
 		camModeCharacteristic,
 		camLocationCharacteristic

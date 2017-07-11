@@ -1,6 +1,6 @@
 {
   "name": "CryptoCam",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Privacy conscious video camera.",
   "main": "app.js",
   "scripts": {
