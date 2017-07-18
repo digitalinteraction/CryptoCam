@@ -37,8 +37,8 @@ const Config = {
 	camLocationCharacUuid: "cc92cc92-ca19-0000-0000-000000000004", // Cam Location characteristic UUID
 	keyServiceUuid: "cc92cc92-ca19-0000-0000-000000000010", // Key service UUID
 	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000011", // Key characteristc UUID
-	connectionTimeout: 50, // Time in seconds before forced disconnect after bonding
-	readTimeout: 50 // Time in seconds before forced disconnect after key read
+	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
+	readTimeout: 5 // Time in seconds before forced disconnect after key read
 };
 
 const PrimaryService = bleno.PrimaryService;
