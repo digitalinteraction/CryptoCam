@@ -64,7 +64,7 @@ let readTimeout = null;
 let camVersionCharacteristic = new Characteristic({
 	uuid: Config.camVersionCharacUuid,
 	properties: ["read"],
-	value: Config.version
+	value: Config.camVersion
 });
 
 let camNameCharacteristic = new Characteristic({
