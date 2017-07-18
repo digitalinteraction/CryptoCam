@@ -9,6 +9,7 @@ const aws = require("aws-sdk");
 const glob = require("glob");
 const exec = require("child_process").exec;
 const os = require("os");
+const pjson = require("./package.json");
 const argv = require('minimist')(process.argv.slice(2));
 
 /**
@@ -24,9 +25,18 @@ const Config = {
 	bucketName: "cryptocam", // Destination S3 bucket
 	encryption: "aes256", // OpenSSL encryption function
 	videoLength: 30, // Length in seconds of recording cycles
+	camVersion: pjson.version,
 	deviceName: os.hostname(), // Use device hostname as Bleno device name
-	serviceUuid: "cc92cc92-ca19-0000-0000-000000000001", // Key service UUID
-	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Key characteristc UUID
+	friendlyName: argv.name, // Cam Friendly Name
+	mode: argv.mode, // Cam Mode auto-upload, 
+	location: argv.location, // Cam Latitude/Longitude or Roaming
+	camServiceUuid: "cc92cc92-ca19-0000-0000-000000000000", // Cam service UUID
+	camVersionCharacUuid: "cc92cc92-ca19-0000-0000-000000000001", // Cam Version characteristic UUID
+	camNameCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Cam Name characteristic UUID
+	camModeCharacUuid: "cc92cc92-ca19-0000-0000-000000000003", // Cam Mode characteristic UUID
+	camLocationCharacUuid: "cc92cc92-ca19-0000-0000-000000000004", // Cam Location characteristic UUID
+	keyServiceUuid: "cc92cc92-ca19-0000-0000-000000000010", // Key service UUID
+	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000011", // Key characteristc UUID
 	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
 	readTimeout: 5 // Time in seconds before forced disconnect after key read
 };
@@ -51,14 +61,48 @@ let currentKeyBytes;
 let connectionTimeout = null;
 let readTimeout = null;
 
+let camVersionCharacteristic = new Characteristic({
+	uuid: Config.camVersionCharacUuid,
+	properties: ["read"],
+	value: Config.camVersion
+});
+
+let camNameCharacteristic = new Characteristic({
+	uuid: Config.camNameCharacUuid,
+	properties: ["read"],
+	value: Config.friendlyName
+});
+
+let camModeCharacteristic = new Characteristic({
+	uuid: Config.camModeCharacUuid,
+	properties: ["read"],
+	value: Config.mode
+});
+
+let camLocationCharacteristic = new Characteristic({
+	uuid: Config.camLocationCharacUuid,
+	properties: ["read"],
+	value: Config.location
+});
+
+let camService = new PrimaryService({
+	uuid: Config.camServiceUuid,
+	characteristics: [
+		camVersionCharacteristic,
+		camNameCharacteristic,
+		camModeCharacteristic,
+		camLocationCharacteristic
+	]
+});
+
 let keyCharacteristic = new Characteristic({
 	uuid: Config.keyCharacUuid,
 	properties: ["read"],
 	onReadRequest: onReadRequest
 });
 
-let primaryService = new PrimaryService({
-	uuid: Config.serviceUuid,
+let keyService = new PrimaryService({
+	uuid: Config.keyServiceUuid,
 	characteristics: [keyCharacteristic]
 });
 
@@ -348,7 +392,7 @@ function onReadRequest(offset, callback) {
  */
 function startBleno() {
 	console.log("Setting up Bleno...");
-	bleno.setServices([primaryService]);
+	bleno.setServices([camService, keyService]);
 
 	bleno.on("accept", (clientAddress) => {
 		currentClient = clientAddress;
@@ -362,7 +406,7 @@ function startBleno() {
 		console.log("Bleno State: " + state);
 		if (state != "poweredOn") { return; }
 	
-		startAdvertisingService(Config.deviceName, [keyCharacteristic.uuid]);		
+		startAdvertisingService(Config.deviceName, [Config.keyServiceUuid]);
 		newRecording();
 
 		setInterval(() => {
