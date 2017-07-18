@@ -102,7 +102,7 @@ let keyCharacteristic = new Characteristic({
 });
 
 let keyService = new PrimaryService({
-	uuid: Config.serviceUuid,
+	uuid: Config.keyServiceUuid,
 	characteristics: [keyCharacteristic]
 });
 
