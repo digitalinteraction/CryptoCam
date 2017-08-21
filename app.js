@@ -43,6 +43,7 @@ const Config = {
 
 const PrimaryService = bleno.PrimaryService;
 const Characteristic = bleno.Characteristic;
+const Descriptor = bleno.Descriptor;
 
 const DEBUG = argv.debug;
 
@@ -64,25 +65,41 @@ let readTimeout = null;
 let camVersionCharacteristic = new Characteristic({
 	uuid: Config.camVersionCharacUuid,
 	properties: ["read"],
-	value: Config.camVersion
+	value: Config.camVersion,
+	descriptors: [new Descriptor({
+    	uuid: '2901',
+    	value: 'Version'
+	})]
 });
 
 let camNameCharacteristic = new Characteristic({
 	uuid: Config.camNameCharacUuid,
 	properties: ["read"],
-	value: Config.friendlyName
+	value: Config.friendlyName,
+	descriptors: [new Descriptor({
+    	uuid: '2901',
+    	value: 'Friendly Name'
+	})]
 });
 
 let camModeCharacteristic = new Characteristic({
 	uuid: Config.camModeCharacUuid,
 	properties: ["read"],
-	value: Config.mode
+	value: Config.mode,
+	descriptors: [new Descriptor({
+    	uuid: '2901',
+    	value: 'Mode'
+	})]
 });
 
 let camLocationCharacteristic = new Characteristic({
 	uuid: Config.camLocationCharacUuid,
 	properties: ["read"],
-	value: Config.location
+	value: Config.location,
+	descriptors: [new Descriptor({
+    	uuid: '2901',
+    	value: 'Location'
+	})]
 });
 
 let camService = new PrimaryService({
@@ -98,7 +115,11 @@ let camService = new PrimaryService({
 let keyCharacteristic = new Characteristic({
 	uuid: Config.keyCharacUuid,
 	properties: ["read"],
-	onReadRequest: onReadRequest
+	onReadRequest: onReadRequest,
+	descriptors: [new Descriptor({
+    	uuid: '2901',
+    	value: 'Key'
+	})]
 });
 
 let keyService = new PrimaryService({
