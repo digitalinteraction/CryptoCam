@@ -217,7 +217,7 @@ async function newRecording() {
 	currentVid = await randomBytes(8);
 	currentKey = await randomBytes(32);
 
-	let segmentBytes = Buffer.allocUnsafe(3);
+	let bytes = Buffer.allocUnsafe(3);
 	bytes.writeUInt8(sn, 0);
 	bytes.writeUInt16(Config.reconnectIn / 100, 1);
 
