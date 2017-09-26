@@ -219,7 +219,7 @@ async function newRecording() {
 
 	let bytes = Buffer.allocUnsafe(3);
 	bytes.writeUInt8(sn, 0);
-	bytes.writeUInt16(Config.reconnectIn / 100, 1);
+	bytes.writeUInt16LE(Config.reconnectIn / 100, 1);
 
 	updateKeyCharac(currentKey.concat(bytes).concat(vid).concat(lastHash.subarray(0,20)));
 }
