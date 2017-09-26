@@ -452,7 +452,7 @@ function startBleno() {
 			console.log("Stopping recording...");
 			currentCamera.stop();
 
-			setTimeout(() => {
+			setTimeout(async () => {
 				console.log("Processing last recording...");
 				if (currentSubjects > 0) {
 					lastHash = await hashFile(currentOutputFile);
