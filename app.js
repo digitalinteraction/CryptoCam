@@ -20,9 +20,10 @@ const argv = require('minimist')(process.argv.slice(2));
 // Camera Configuration
 const Config = {
 	recordings: "/tmp/CryptoCam/",
-	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/", // Upload location for all data
+	baseUrl: "https://s3-eu-west-1.amazonaws.com/cryptocam/{0}", // Upload location for all data
 	awsProfile: "CryptoCam", // Used to authenticate with AWS
 	bucketName: "cryptocam", // Destination S3 bucket
+	hashFunction: "sha256", // OpenSSL hash function
 	encryption: "aes256", // OpenSSL encryption function
 	videoLength: 30, // Length in seconds of recording cycles
 	camVersion: pjson.version,
@@ -35,6 +36,7 @@ const Config = {
 	camNameCharacUuid: "cc92cc92-ca19-0000-0000-000000000002", // Cam Name characteristic UUID
 	camModeCharacUuid: "cc92cc92-ca19-0000-0000-000000000003", // Cam Mode characteristic UUID
 	camLocationCharacUuid: "cc92cc92-ca19-0000-0000-000000000004", // Cam Location characteristic UUID
+	camUrlCharacUuid: "cc92cc92-ca19-0000-0000-000000000005", // Cam Location characteristic UUID
 	keyServiceUuid: "cc92cc92-ca19-0000-0000-000000000010", // Key service UUID
 	keyCharacUuid: "cc92cc92-ca19-0000-0000-000000000011", // Key characteristc UUID
 	connectionTimeout: 5, // Time in seconds before forced disconnect after bonding
@@ -50,11 +52,13 @@ const DEBUG = argv.debug;
 // Static configuration and setup
 let s3;
 
-let currentKey;
-let currentIv;
 let currentCamera;
 let currentOutputFile;
-let currentUrl;
+let currentKey;
+let currentVid;
+
+let sn = 0;
+let lastHash = Buffer.allocUnsafe(21);
 
 let currentClient;
 let currentSubjects = 0;
@@ -102,13 +106,24 @@ let camLocationCharacteristic = new Characteristic({
 	})]
 });
 
+let camUrlCharacteristic = new Characteristic({
+	uuid: Config.camUrlCharacUuid,
+	properties: ["read"],
+	value: Config.baseUrl,
+	descriptors: [new Descriptor({
+    	uuid: '2901',
+    	value: 'URL'
+	})]
+});
+
 let camService = new PrimaryService({
 	uuid: Config.camServiceUuid,
 	characteristics: [
 		camVersionCharacteristic,
 		camNameCharacteristic,
 		camModeCharacteristic,
-		camLocationCharacteristic
+		camLocationCharacteristic,
+		camUrlCharacteristic
 	]
 });
 
@@ -190,26 +205,23 @@ function newCamera(outputFile) {
  */
 async function newRecording() {
 	console.log("Starting new recording...");
-	
+
 	let currentOutput = path.join(Config.recordings, (new Date().toISOString()).replace(/[:TZ\.]/g, '-'));
-	currentOutputFile = currentOutput + ".h264";	
+	currentOutputFile = currentOutput + ".h264";
 	currentCamera = newCamera(currentOutputFile);
 	currentCamera.start();
 	console.log(`Started recording: ${currentOutputFile}`);
 
-	currentUrl = url.resolve(Config.baseUrl, uuid());
 	currentSubjects = 0;
 
-	let result = await generateKey();
-	currentKey = result.key;
-	currentIv = result.iv;
-	updateKeyCharac(JSON.stringify({
-		key: currentKey.toString('hex'),
-		iv: currentIv.toString('hex'),
-		encryption: Config.encryption,
-		url: currentUrl,
-		reconnectIn: Config.videoLength * 1000
-	}));
+	currentVid = await randomBytes(8);
+	currentKey = await randomBytes(32);
+
+	let segmentBytes = Buffer.allocUnsafe(3);
+	bytes.writeUInt8(sn, 0);
+	bytes.writeUInt16(Config.reconnectIn / 100, 1);
+
+	updateKeyCharac(currentKey.concat(bytes).concat(vid).concat(lastHash.subarray(0,20)));
 }
 
 /**
@@ -299,6 +311,20 @@ async function grabFrame(input, output) {
 }
 
 /**
+ * Hash file.
+ * @param input
+ * @returns
+ */
+async function hashFile(input) {
+	return new Promise((resolve, reject) => {
+		let hash = crypto.createHash(Config.hashFunction);
+		let i = fs.createReadStream(input);
+
+		resolve(i.pipe(hash).read());
+	});
+}
+
+/**
  * Encrypt file.
  * @param key
  * @param iv
@@ -308,7 +334,7 @@ async function grabFrame(input, output) {
  */
 async function encryptFile(key, iv, input, output) {
 	return new Promise((resolve, reject) => {
-		let cipher = crypto.createCipheriv(Config.encryption, key, iv);
+		let cipher = crypto.createCipher(Config.encryption, key);
 		let i = fs.createReadStream(input);
 		let o = fs.createWriteStream(output);
 
@@ -347,21 +373,14 @@ async function removeFile(path) {
  * Generate new key and initial vector.
  * @returns
  */
-function generateKey() {
+function randomBytes(length) {
 	return new Promise((resolve, reject) => {
-		crypto.randomBytes(32, (kerr, key) => {
-			if (kerr) {
-				reject(`Unable to generate key: ${kerr}`);
-				if (DEBUG) console.error(kerr);
+		crypto.randomBytes(length, (err, bytes) => {
+			if (err) {
+				reject(`Unable to generate bytes: ${err}`);
+				if (DEBUG) console.error(err);
 			} else {
-				crypto.randomBytes(16, (iverr, iv) => {
-					if (iverr) {
-						reject(`Unable to generate iv: ${iverr}`);
-						if (DEBUG) console.error(iverr);
-					} else {
-						resolve({ key: key, iv: iv });
-					}
-				});
+				resolve(bytes);
 			}
 		});
 	});
@@ -383,12 +402,11 @@ function startAdvertisingService(serviceName, serviceUuids) {
 
 /**
  * Update key characteristc value.
- * @param json
+ * @param bytes
  */
-function updateKeyCharac(json) {
-	var data = Buffer.from(json, "utf8");
-	if (DEBUG) console.log(`Updated Key Characteristic: ${json}`);
-	currentKeyBytes = data;
+function updateKeyCharac(bytes) {
+	if (DEBUG) console.log(`Updated Key Characteristic: ${bytes.length}`);
+	currentKeyBytes = bytes;
 }
 
 /**
@@ -437,6 +455,7 @@ function startBleno() {
 			setTimeout(() => {
 				console.log("Processing last recording...");
 				if (currentSubjects > 0) {
+					lastHash = await hashFile(currentOutputFile);
 					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
 				} else {
 					removeFile(currentOutputFile);
