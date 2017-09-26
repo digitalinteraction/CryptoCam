@@ -221,7 +221,7 @@ async function newRecording() {
 	bytes.writeUInt8(sn, 0);
 	bytes.writeUInt16LE(Config.reconnectIn / 100, 1);
 
-	updateKeyCharac(currentKey.concat(bytes).concat(vid).concat(lastHash.subarray(0,20)));
+	updateKeyCharac(Buffer.concat([currentKey, bytes, vid, lastHash.subarray(0,20)]));
 }
 
 /**
