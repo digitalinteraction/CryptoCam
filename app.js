@@ -231,7 +231,7 @@ async function newRecording() {
  * @param iv
  * @param url
  */
-async function processRecording(outputFile, key, iv, destinationUrl) {
+async function processRecording(outputFile, key, vid) {
 	let outputPath = path.join(Config.recordings, path.basename(outputFile, ".h264"));
 
 	console.log(`Wrapping previous recording: ${outputFile}`);
@@ -244,7 +244,7 @@ async function processRecording(outputFile, key, iv, destinationUrl) {
 	try {
 		// Wrap video
 		await wrapRecording(outputFile, mp4Path);
-		let uploadKey = url.parse(destinationUrl).pathname.split('/')[2];
+		let uploadKey = vid.toString('hex');
 
 		// Grab thumb
 		await grabFrame(mp4Path, thumbPath);
@@ -456,7 +456,7 @@ function startBleno() {
 				console.log("Processing last recording...");
 				if (currentSubjects > 0) {
 					lastHash = await hashFile(currentOutputFile);
-					processRecording(currentOutputFile, currentKey, currentIv, currentUrl);
+					processRecording(currentOutputFile, currentKey, currentVid);
 				} else {
 					removeFile(currentOutputFile);
 					console.log("Key not read so deleted recording without uploading.");
