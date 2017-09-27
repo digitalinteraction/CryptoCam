@@ -228,8 +228,7 @@ async function newRecording() {
  * Process previous recording. Encrypt, upload, remove.
  * @param outputFile
  * @param key
- * @param iv
- * @param url
+ * @param vid
  */
 async function processRecording(outputFile, key, vid) {
 	let outputPath = path.join(Config.recordings, path.basename(outputFile, ".h264"));
@@ -251,7 +250,7 @@ async function processRecording(outputFile, key, vid) {
 
 		// Encrypt video and thumb
 		console.log(`Encrypting previous recording: ${mp4Path}`);
-		await Promise.all([encryptFile(key, iv, mp4Path, encryptedVidPath), encryptFile(key, iv, thumbPath, encryptedThumbPath)]);
+		await Promise.all([encryptFile(key, mp4Path, encryptedVidPath), encryptFile(key, thumbPath, encryptedThumbPath)]);
 
 		// Upload video
 		console.log(`Uploading previous recording: ${encryptedVidPath}`);
@@ -327,12 +326,11 @@ async function hashFile(input) {
 /**
  * Encrypt file.
  * @param key
- * @param iv
  * @param input
  * @param output
  * @returns
  */
-async function encryptFile(key, iv, input, output) {
+async function encryptFile(key, input, output) {
 	return new Promise((resolve, reject) => {
 		let cipher = crypto.createCipher(Config.encryption, key);
 		let i = fs.createReadStream(input);
