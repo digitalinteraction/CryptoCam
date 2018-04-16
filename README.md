@@ -1,13 +1,12 @@
-# Confidential!! -- Do not share!
-## CryptoCam: Camera
+# CryptoCam: Camera
 
-### Requirements
+## Requirements
 
 1. Node 7.x <
 2. `libavconv`
 3. AWS credentials in `.aws/credentials`
 
-### Installation
+## Installation
 
 1. Clone repo onto Raspberry Pi with camera (ensure camera enabled in `sudo raspi-config`).
 2. Run `npm install` (`libusb` will fail to build on Linux, this is expected).
